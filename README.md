@@ -27,6 +27,10 @@ CoreS3 SE.
 When a permission prompt blocks a session, the screen takes over with the
 tool name and the full call. You approve with a tap or hold-to-deny.
 
+<p align="center">
+  <img src="docs/approval.jpg" alt="Pager showing a real Claude Code permission prompt for &#39;jc policies list --output json --limit 500&#39;" width="420">
+</p>
+
 **→ See [`PAGER_SPEC.md`](./PAGER_SPEC.md) for the v1 specification and
 [`BACKLOG.md`](./BACKLOG.md) for known limits and follow-ups.**
 
