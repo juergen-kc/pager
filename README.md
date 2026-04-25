@@ -1,19 +1,47 @@
 # Pager
 
-A physical Claude Code remote for your desk.
+**A physical Claude Code remote for your desk.**
 
 Pager is a small touchscreen companion that gives you ambient awareness of
 Claude Code and Claude Cowork sessions, and lets you approve or deny
-tool-use prompts without context-switching away from your main work. It
-talks to the Claude desktop app over Bluetooth LE using the documented
-[Hardware Buddy protocol](https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md).
+tool-use prompts with a tap — without context-switching away from your main
+work. It pairs with the Claude desktop app over Bluetooth LE using
+Anthropic's documented
+[Hardware Buddy protocol](https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md)
+(Nordic UART Service + newline-delimited JSON), and runs on an M5Stack
+CoreS3 SE.
 
-**→ See [`PAGER_SPEC.md`](./PAGER_SPEC.md) for the v1 specification.**
+```
+  ┌──────────────────────────────┐
+  │  Pager · connected           │
+  │                              │
+  │     2 running  ·  0 waiting  │
+  │                              │
+  │  ▓▓▓▓▓▓▓▓▓░░░░  31.2k today  │
+  │                              │
+  │  10:42  git push             │
+  │  10:41  yarn test            │
+  └──────────────────────────────┘
+```
+
+When a permission prompt blocks a session, the screen takes over with the
+tool name and the full call. You approve with a tap or hold-to-deny.
+
+**→ See [`PAGER_SPEC.md`](./PAGER_SPEC.md) for the v1 specification and
+[`BACKLOG.md`](./BACKLOG.md) for known limits and follow-ups.**
 
 ## Hardware
 
-- [M5Stack CoreS3 SE](https://shop.m5stack.com/products/m5stack-cores3-se-iot-controller-w-o-battery-bottom) (SKU K128-SE)
-- USB-C cable
+- [M5Stack CoreS3 SE](https://shop.m5stack.com/products/m5stack-cores3-se-iot-controller-w-o-battery-bottom) (SKU K128-SE) — ESP32-S3, 2.0″ IPS touch (320×240), 8 MB PSRAM, 16 MB flash, USB-C powered.
+- USB-C cable.
+
+The "SE" matters: it has no battery and no IMU. The firmware is written
+to that constraint and won't surface battery / tilt UI even though the
+Hardware Buddy protocol allows for it. Anthropic's reference firmware
+([`claude-desktop-buddy`](https://github.com/anthropics/claude-desktop-buddy),
+MIT) targets the regular CoreS3 with a pet character pack instead — this
+is a fresh, independent implementation with a pager-style UI. No code is
+shared; only the documented wire protocol.
 
 ## Build & flash
 
@@ -67,38 +95,72 @@ pager/
 │   ├── state/session.*   in-memory snapshot model + PSRAM ring buffer
 │   ├── system/clock.*    RTC + epoch/TZ formatting helpers
 │   └── ui/               LVGL port, router, view widgets
-├── PAGER_SPEC.md         v1 specification
-├── CLAUDE.md             notes for Claude Code instances
+├── scripts/              diagnostic helpers + LVGL-xtensa pre-build patch
+├── PAGER_SPEC.md         v1 specification (read this before redesigning)
+├── BACKLOG.md            known limits and follow-ups
+├── HANDOFF.md            cross-machine bring-up notes
+├── CLAUDE.md             design rules for Claude Code instances
 ├── platformio.ini
 ├── LICENSE
 └── README.md
 ```
 
-## Current status
+The composition root in `src/main.cpp` is the only place that knows about
+every module — modules in `ble/`, `proto/`, `state/`, `ui/` never call
+each other directly. See `CLAUDE.md` for the design rules.
 
-**v1.0.0 — ship.** All four UI modes (Glance / Approval / Recent / Settings),
-full snapshot + turn-event handling, permission round-trip, time sync, and
-the `status` / `name` / `owner` / `unpair` commands. Folder push is refused
-with `ack:false` per spec.
+## What works today
 
-### Milestones
+Verified end-to-end against Claude for macOS in Developer Mode, with both
+synthetic prompts (via `scripts/blefake.py`) and a real Claude permission
+prompt for an actual `pwsh` invocation:
 
-| Version  | Scope                                                              |
-|----------|--------------------------------------------------------------------|
-| v0.1.0   | Hello-world baseline                                               |
-| v0.2.0   | Heartbeat snapshot parsing + Glance view render                    |
-| v0.3.0   | Approval mode + permission round-trip                              |
-| v0.4.0   | Recent view (ring buffer) + Settings                               |
-| v0.5.0   | Status command ack, time sync, owner + device-name persistence     |
-| v1.0.0   | Ship (this release)                                                |
+- Pairing with the LE Secure Connections passkey flow (DisplayOnly IO
+  capability, AES-CCM-encrypted link, bond persists across reboots and
+  host sleep/wake).
+- Ambient Glance view: counters, today's tokens (logarithmic scale), last
+  two transcript entries — updates within ~1 s of each heartbeat.
+- **Approval takeover**: when a `prompt:`-bearing heartbeat arrives, the
+  screen flips to a full-screen tool-call review with green Approve and
+  hold-to-Deny. The decision round-trips back to the desktop in well
+  under 500 ms.
+- Recent view (PSRAM-backed ring of the last ~64 turn events).
+- Settings view (device name override, owner name, chime toggle,
+  forget-bonds button).
+- Local NVS-persisted approval / denial counters.
+- Time sync from desktop into the BM8563 RTC.
+- Soft chime on prompt arrival (configurable, off by default).
 
-## Protocol source
+[`BACKLOG.md`](./BACKLOG.md) tracks what's not yet covered (24 h soak,
+font-size tuning, etc.).
 
-This firmware is a fresh implementation against Anthropic's
-[Hardware Buddy REFERENCE.md](https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md).
-No code is copied from `anthropics/claude-desktop-buddy`; only the
-documented wire protocol is used.
+## Diagnostic scripts
+
+If something on the protocol layer breaks, these are the tools that
+earned their keep during initial bring-up. All assume `bleak` and
+`pyserial` are available (PlatformIO's bundled Python has both):
+
+- `scripts/blecli.py` — connects as a generic BLE central, prints the
+  GATT structure, and round-trips a `{"cmd":"status"}`.
+- `scripts/blefake.py` — simulates Claude Desktop. Sends a heartbeat
+  with a synthetic permission prompt and waits for the device's
+  decision. Use this to verify the approval UI without depending on
+  Claude actually emitting one.
+- `scripts/pagermon.py` — long-running USB-CDC monitor that reconnects
+  across drops. `pio device monitor` dies on the first drop; this one
+  keeps logging.
+- `scripts/fix_lvgl_xtensa.py` — pre-build hook that strips LVGL's
+  ARM-only `.S` files (Helium, NEON) from libdeps before compile. Wired
+  in `platformio.ini`, runs automatically.
+
+[`HANDOFF.md`](./HANDOFF.md) has the longer story of what each one
+caught.
 
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+The Hardware Buddy BLE protocol is specified by Anthropic in
+[`claude-desktop-buddy/REFERENCE.md`](https://github.com/anthropics/claude-desktop-buddy/blob/main/REFERENCE.md).
+This firmware implements that protocol from the spec; no code is copied
+from upstream.
