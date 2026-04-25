@@ -44,3 +44,37 @@ Areas most likely to need a small fix once `pio run` runs for the first time:
 
 PAGER_SPEC.md §9 lists the eight ship criteria. Walk them in order — each
 exercises a different layer (BLE, encryption, JSON, LVGL, NVS, audio).
+
+## Diagnostic scripts (`scripts/`)
+
+These earned their keep during bring-up and are checked in for reuse. All
+require `pip install bleak pyserial` (or PIO's bundled Python — both
+modules are pre-installed there).
+
+- **`fix_lvgl_xtensa.py`** — pre-build hook (wired in `platformio.ini`).
+  Removes LVGL's ARM-only `.S` files (Helium, NEON) from libdeps before
+  compilation, since the xtensa assembler chokes on the `<stdint.h>`
+  typedefs they pull in unconditionally. Runs automatically; no manual
+  invocation.
+
+- **`pagermon.py`** — long-running USB-CDC monitor that reconnects across
+  drops. The ESP32-S3's CDC port disappears whenever NimBLE crashes,
+  upload runs, or the device reboots; `pio device monitor` dies on the
+  first drop. This one keeps logging. Run it in another terminal:
+  `python3 scripts/pagermon.py`.
+
+- **`blecli.py`** — connects to the Pager as a generic BLE central,
+  prints the discovered GATT structure, subscribes to TX, writes a
+  `{"cmd":"status"}` to RX, and dumps the reply. Use this whenever
+  Claude's panel says "No response" — if `blecli` works the firmware
+  is fine and the issue is on Claude's side. The first time we ran it
+  it caught the `WRITE_NR` and `setValue+notify` bugs.
+
+- **`blefake.py`** — simulates Claude Desktop. Connects, subscribes to
+  TX, sends a heartbeat with a synthetic permission prompt, and waits
+  for the device's `{"cmd":"permission",...}` response. Lets you test
+  the approval-takeover UI end-to-end without needing a real Claude
+  Code permission prompt to fire at a heartbeat-friendly moment.
+
+For all the BLE scripts: Cmd-Q Claude first so the peripheral connection
+is free.

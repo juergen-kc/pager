@@ -9,7 +9,12 @@
 #include <stdint.h>
 
 #define LV_COLOR_DEPTH        16
-#define LV_COLOR_16_SWAP      0
+// LVGL emits RGB565 in native (little-endian) byte order; M5GFX's
+// pushImage(uint16_t*) sends those bytes as-is over SPI, but the ILI9342C
+// expects RGB565 big-endian on the wire. Without this swap, R↔B end up
+// transposed (dark red shows as blue, green as yellow) and text edges get
+// chromatic fringing because adjacent sub-pixels are mis-coloured.
+#define LV_COLOR_16_SWAP      1
 
 // Built-in LVGL allocator with a 64 KB pool. Predictable, debuggable, and
 // avoids depending on ESP-IDF's heap caps. The pool itself sits in BSS and

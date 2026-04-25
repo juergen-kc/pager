@@ -157,20 +157,22 @@ bool sendLine(const std::string& line) {
   std::string payload = line;
   if (payload.empty() || payload.back() != '\n') payload.push_back('\n');
 
-  // ATT notification carries up to (MTU - 3) bytes per packet. NimBLE
-  // typically negotiates MTU 255 with macOS, giving 252 usable bytes.
-  // 240 leaves a safety margin and keeps our 200-ish-byte status responses
-  // and most snapshots in a single notify, so Claude's reassembly logic
-  // never sees a split.
+  // ATT notification carries up to (MTU - 3) bytes per packet. Query the
+  // negotiated MTU on the live connection — peers that don't bump up from
+  // the 23-byte default would silently truncate if we hardcoded a larger
+  // chunk. Falls back to 23-3=20 if MTU lookup fails.
   //
   // Use the explicit notify(value, length) overload rather than setValue +
   // notify(). The setValue path silently truncates against the local
   // characteristic value buffer's capacity (NimBLE 2.x sizes that to the
   // last advertised MTU on creation, before MTU is negotiated up), so a
   // 182-byte response was going out as two 1-byte notifications.
-  constexpr size_t kChunk = 240;
-  for (size_t off = 0; off < payload.size(); off += kChunk) {
-    size_t n = std::min(kChunk, payload.size() - off);
+  uint16_t mtu = g_server ? g_server->getPeerMTU(g_activeConn) : 23;
+  if (mtu < 23) mtu = 23;
+  size_t chunk = (size_t)mtu - 3;
+
+  for (size_t off = 0; off < payload.size(); off += chunk) {
+    size_t n = std::min(chunk, payload.size() - off);
     g_txChar->notify(reinterpret_cast<const uint8_t*>(payload.data()) + off, n);
   }
   return true;

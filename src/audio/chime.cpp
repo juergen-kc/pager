@@ -7,9 +7,9 @@ namespace pager::audio {
 
 void begin() {
   // M5.begin() configures the speaker; we just nudge volume to a polite
-  // desk-companion level. 0–255; 80 ≈ "you'll hear it across a small office
-  // but it won't startle".
-  M5.Speaker.setVolume(80);
+  // desk-companion level. 0–255; 50 ≈ "audible from arm's reach but won't
+  // cut through a conversation".
+  M5.Speaker.setVolume(50);
 }
 
 void chime() {

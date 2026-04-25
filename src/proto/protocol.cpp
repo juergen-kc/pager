@@ -242,13 +242,13 @@ bool sendStatusResponse(uint32_t n) {
   data["sec"]  = ble::isSecure();
 
   // CoreS3 SE has no battery — but Claude's validator wants the `bat`
-  // object fully populated. Mirror the shape from the protocol example:
-  // pct/mV/mA/usb. With usb:true and no cell, pct=100 / mV=5000 / mA=0
-  // is the closest honest equivalent. PAGER_SPEC.md §5 says we omit `bat`
+  // object fully populated, so we send the honest minimum: `usb:true` and
+  // `pct:100` (we ARE fully powered while on USB) plus `mV:0` and `mA:0`
+  // since there's no cell to measure. PAGER_SPEC.md §5 says we omit `bat`
   // entirely; the validator disagrees in practice.
   JsonObject bat = data["bat"].to<JsonObject>();
   bat["pct"] = 100;
-  bat["mV"]  = 5000;
+  bat["mV"]  = 0;
   bat["mA"]  = 0;
   bat["usb"] = true;
 

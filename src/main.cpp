@@ -133,10 +133,6 @@ void drainPairingComplete() {
   g_blePairingComplete = false;
   pager::ui::router::hidePasskey();
   pager::ui::router::onStateChanged();
-  // Some Hardware Buddy implementations wait for a notification from the
-  // device before sending heartbeats. Push an unsolicited status response
-  // so the desktop has something to render in its preview panel.
-  pager::proto::sendStatusResponse(0);
 }
 
 } // namespace
