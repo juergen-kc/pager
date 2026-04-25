@@ -279,54 +279,63 @@ void refresh() {
 
 namespace passkey {
 namespace {
-lv_obj_t*    g_overlay   = nullptr;
-lv_obj_t*    g_lblCode   = nullptr;
-uint32_t     g_shownAtMs = 0;
+lv_obj_t*    g_screen      = nullptr;   // dedicated LVGL screen for the passkey
+lv_obj_t*    g_lblCode     = nullptr;
+lv_obj_t*    g_prevScreen  = nullptr;   // screen we came from, to restore on hide()
+uint32_t     g_shownAtMs   = 0;
 constexpr uint32_t kAutoHideMs = 30000;
 } // namespace
 
-void mount(lv_obj_t* root) {
-  if (g_overlay) return;
-  g_overlay = lv_obj_create(root);
-  lv_obj_remove_style_all(g_overlay);
-  lv_obj_set_size(g_overlay, LV_PCT(100), LV_PCT(100));
-  lv_obj_set_style_bg_color(g_overlay, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(g_overlay, LV_OPA_COVER, 0);
-  lv_obj_add_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
+void mount(lv_obj_t* /*root*/) {
+  if (g_screen) return;
+  // A dedicated screen avoids z-order / dirty-region quirks that bit us when
+  // we tried a sibling overlay on top of the tileview. lv_screen_load() is
+  // a guaranteed full repaint.
+  g_screen = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(g_screen, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(g_screen, LV_OPA_COVER, 0);
 
-  lv_obj_t* hdr = lv_label_create(g_overlay);
+  lv_obj_t* hdr = lv_label_create(g_screen);
   lv_label_set_text(hdr, "Pair with");
   lv_obj_set_style_text_color(hdr, kAccent, 0);
   lv_obj_set_style_text_font(hdr, &lv_font_montserrat_24, 0);
   lv_obj_align(hdr, LV_ALIGN_TOP_MID, 0, 16);
 
-  lv_obj_t* sub = lv_label_create(g_overlay);
+  lv_obj_t* sub = lv_label_create(g_screen);
   lv_label_set_text(sub, "Enter this code on your Mac:");
   lv_obj_set_style_text_color(sub, lv_color_hex(0x808080), 0);
   lv_obj_align(sub, LV_ALIGN_TOP_MID, 0, 56);
 
-  g_lblCode = lv_label_create(g_overlay);
+  g_lblCode = lv_label_create(g_screen);
   lv_obj_set_style_text_color(g_lblCode, lv_color_white(), 0);
   lv_obj_set_style_text_font(g_lblCode, &lv_font_montserrat_24, 0);
   lv_obj_align(g_lblCode, LV_ALIGN_CENTER, 0, 20);
 }
 
 void show(unsigned int code) {
-  if (!g_overlay) return;
+  if (!g_screen) return;
   char buf[8];
   snprintf(buf, sizeof(buf), "%06u", code);
   lv_label_set_text(g_lblCode, buf);
-  lv_obj_clear_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_move_foreground(g_overlay);
+  if (lv_screen_active() != g_screen) {
+    g_prevScreen = lv_screen_active();
+    lv_screen_load(g_screen);
+  }
+  // Force a synchronous refresh — LVGL 9 partial-render mode otherwise
+  // drops the screen swap on its first dirty-region pass.
+  lv_refr_now(nullptr);
   g_shownAtMs = lv_tick_get();
 }
 
 void hide() {
-  if (g_overlay) lv_obj_add_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
+  if (g_screen && lv_screen_active() == g_screen && g_prevScreen) {
+    lv_screen_load(g_prevScreen);
+    lv_refr_now(nullptr);
+  }
 }
 
 void tick() {
-  if (!g_overlay || lv_obj_has_flag(g_overlay, LV_OBJ_FLAG_HIDDEN)) return;
+  if (!g_screen || lv_screen_active() != g_screen) return;
   if ((lv_tick_get() - g_shownAtMs) > kAutoHideMs) hide();
 }
 
@@ -413,6 +422,10 @@ void show() {
   refresh();
   lv_obj_clear_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(g_overlay);
+  // Force a synchronous repaint — same LVGL 9 partial-render edge case the
+  // passkey screen hit. Without this, an overlay revealed via clear-HIDDEN
+  // stays unpainted until something else triggers a full screen refresh.
+  lv_refr_now(nullptr);
   // Snapshot id so the late-arrival race described above can't bite.
   const auto& p = state::current().prompt;
   std::strncpy(g_promptIdSnap, p.id.c_str(), sizeof(g_promptIdSnap) - 1);
@@ -422,6 +435,7 @@ void show() {
 void hide() {
   if (!g_overlay) return;
   lv_obj_add_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
+  lv_refr_now(nullptr);
 }
 
 void refresh() {

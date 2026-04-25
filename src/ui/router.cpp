@@ -85,6 +85,13 @@ void onStateChanged() {
     approval::hide();
     g_modalOn = false;
   }
+
+  // LVGL 9 in partial-render mode misses label-text changes on already-laid-
+  // out children — same edge case we hit on the passkey overlay. Invalidate
+  // *and* force-render synchronously so the heartbeat counters tick over
+  // visibly within the spec's 1s budget (PAGER_SPEC.md §9.3).
+  lv_obj_invalidate(lv_screen_active());
+  lv_refr_now(nullptr);
 }
 
 void onPromptArrived() {
@@ -104,6 +111,8 @@ void showPasskey(unsigned int code) {
   g_lastTouchMs = lv_tick_get();
   passkey::show(code);
 }
+
+void hidePasskey() { passkey::hide(); }
 
 void tickPasskey() { passkey::tick(); }
 

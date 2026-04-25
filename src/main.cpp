@@ -49,10 +49,17 @@ std::string buildDeviceName() {
 
 // ─────────────── BLE-task callbacks (must be fast / non-blocking) ───────────────
 
+// Flag set by BLE task when the link becomes encrypted; main loop hides the
+// passkey screen on the transition. (Same volatile-bool pattern as passkey.)
+volatile bool g_blePairingComplete = false;
+
 void onBleStateChanged(pager::ble::LinkState s) {
   Serial.printf("[ble] state = %s\n", pager::ble::stateName(s));
   // No UI work here — LVGL is not safe to touch off the main loop. The
   // visible link state is implied by snapshot freshness in Glance.
+  if (s == pager::ble::LinkState::Connected) {
+    g_blePairingComplete = true;
+  }
 }
 
 void onLineReceived(const std::string& line) {
@@ -121,6 +128,17 @@ void drainPasskey() {
   pager::ui::router::showPasskey(g_pendingPasskey);
 }
 
+void drainPairingComplete() {
+  if (!g_blePairingComplete) return;
+  g_blePairingComplete = false;
+  pager::ui::router::hidePasskey();
+  pager::ui::router::onStateChanged();
+  // Some Hardware Buddy implementations wait for a notification from the
+  // device before sending heartbeats. Push an unsolicited status response
+  // so the desktop has something to render in its preview panel.
+  pager::proto::sendStatusResponse(0);
+}
+
 } // namespace
 
 void setup() {
@@ -167,6 +185,7 @@ void loop() {
   M5.update();
 
   drainPasskey();
+  drainPairingComplete();
   drainInbound();
 
   pager::ui::router::serviceIdleDimming();

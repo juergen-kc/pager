@@ -38,6 +38,10 @@ void serviceIdleDimming();
 // time to enter it on the host (handled inside the passkey view).
 void showPasskey(unsigned int code);
 
+// Tear the passkey screen down — call when the link transitions to bonded
+// (encrypted) so we don't sit on the passkey view after pairing succeeds.
+void hidePasskey();
+
 // Tick the passkey auto-hide timer; call from the main loop.
 void tickPasskey();
 

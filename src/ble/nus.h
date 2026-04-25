@@ -36,6 +36,11 @@ bool sendLine(const std::string& line);
 // True if a peer is currently connected over an encrypted (bonded) link.
 bool isSecure();
 
+// The name we registered with NimBLE on begin() — the same string a peer
+// sees in the scan response. Useful for the status-response `name` field
+// when the user hasn't overridden it via NVS.
+const std::string& advertisedName();
+
 // Wipe every bond in NimBLE's NVS store. Caller should reboot afterwards;
 // the advertising state will not self-recover in-place.
 void forgetBonds();

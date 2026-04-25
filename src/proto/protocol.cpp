@@ -233,8 +233,24 @@ bool sendStatusResponse(uint32_t n) {
   doc["n"]   = n;
 
   JsonObject data = doc["data"].to<JsonObject>();
-  data["name"] = s.deviceName.empty() ? "" : s.deviceName.c_str();
+  // Fall back to the BLE-advertised name (`Claude-Pager-XXXX`) when the user
+  // hasn't set an override via NVS. Claude's deviceStatus validator rejects
+  // an empty `name`, so never send "" — the desktop will sit in
+  // "3 status timeouts" forever (we observed this).
+  const std::string& fallback = ble::advertisedName();
+  data["name"] = s.deviceName.empty() ? fallback.c_str() : s.deviceName.c_str();
   data["sec"]  = ble::isSecure();
+
+  // CoreS3 SE has no battery — but Claude's validator wants the `bat`
+  // object fully populated. Mirror the shape from the protocol example:
+  // pct/mV/mA/usb. With usb:true and no cell, pct=100 / mV=5000 / mA=0
+  // is the closest honest equivalent. PAGER_SPEC.md §5 says we omit `bat`
+  // entirely; the validator disagrees in practice.
+  JsonObject bat = data["bat"].to<JsonObject>();
+  bat["pct"] = 100;
+  bat["mV"]  = 5000;
+  bat["mA"]  = 0;
+  bat["usb"] = true;
 
   JsonObject sys = data["sys"].to<JsonObject>();
   sys["up"]   = (uint32_t)(millis() / 1000);
@@ -243,9 +259,13 @@ bool sendStatusResponse(uint32_t n) {
   JsonObject stats = data["stats"].to<JsonObject>();
   stats["appr"] = c.appr;
   stats["deny"] = c.deny;
+  // `vel` and `nap` are pet-state derived in the reference firmware and
+  // PAGER_SPEC.md §5 calls them out as omittable. Like `bat`, the validator
+  // wants them present, so we send zeros.
+  stats["vel"]  = 0;
+  stats["nap"]  = 0;
   stats["lvl"]  = c.lvl;
 
-  // bat omitted intentionally — CoreS3 SE has no battery (PAGER_SPEC.md §5).
   return sendJson(doc);
 }
 

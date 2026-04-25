@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 // LVGL 9.x bring-up against M5GFX. Owns the framebuffers, the flush
 // callback, the touch driver, and exposes a single tick() to be called
 // from the main loop. Everything else in src/ui/ talks to LVGL directly

@@ -5,8 +5,9 @@
 // pulls current SessionState / settings into those widgets. Views never
 // observe state directly — the Router calls refresh() at the right times.
 
-struct _lv_obj_t;
-typedef struct _lv_obj_t lv_obj_t;
+// LVGL 9 unified the struct tag and typedef; older LVGL 8 used `_lv_obj_t`.
+struct lv_obj_t;
+typedef struct lv_obj_t lv_obj_t;
 
 namespace pager::ui {
 

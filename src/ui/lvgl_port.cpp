@@ -4,6 +4,7 @@
 #include "ui/lvgl_port.h"
 
 #include <M5Unified.h>
+#include <Arduino.h>  // for millis() in the lv_tick_set_cb lambda
 #include <lvgl.h>
 
 namespace pager::ui::lvgl_port {
@@ -62,6 +63,13 @@ void begin() {
   M5.Display.setBrightness(192);
 
   lv_init();
+
+  // LVGL 9 dropped the LV_TICK_CUSTOM_SYS_TIME_EXPR mechanism we set in
+  // include/lv_conf.h. Without a registered tick callback `lv_tick_get()`
+  // returns 0, which silently breaks any code that does
+  // `lv_tick_get() - some_past_ms` — including the glance view's
+  // disconnected-banner staleness check (it reads as "very stale forever").
+  lv_tick_set_cb([]() -> uint32_t { return millis(); });
 
   g_disp = lv_display_create(kHRes, kVRes);
   lv_display_set_flush_cb(g_disp, flushCb);

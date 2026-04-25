@@ -20,6 +20,7 @@ NimBLEServer*        g_server           = nullptr;
 NimBLECharacteristic* g_txChar          = nullptr;
 NimBLECharacteristic* g_rxChar          = nullptr;
 std::string          g_lineBuffer;
+std::string          g_advertisedName;
 bool                 g_isSecure         = false;
 uint16_t             g_activeConn       = BLE_HS_CONN_HANDLE_NONE;
 
@@ -86,6 +87,7 @@ class RxCallbacks : public NimBLECharacteristicCallbacks {
 
 void begin(const std::string& deviceName, const NusCallbacks& cbs) {
   g_cbs = cbs;
+  g_advertisedName = deviceName;
 
   NimBLEDevice::init(deviceName);
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
@@ -108,18 +110,41 @@ void begin(const std::string& deviceName, const NusCallbacks& cbs) {
       NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_ENC
   );
 
-  // RX: desktop -> device, write. WRITE_ENC rejects unencrypted writes.
+  // RX: desktop -> device, write. Need to advertise BOTH write modes the
+  // standard NUS profile supports — WRITE (with response, 0x0008) AND
+  // WRITE_NR (write-without-response, 0x0004). Claude's bridge uses
+  // WRITE_CMD; without the NR property bit, NimBLE rejects those packets
+  // and Claude logs "3 status timeouts" forever. WRITE_ENC (0x1000) is the
+  // NimBLE permission flag forcing encryption on the writes.
   g_rxChar = svc->createCharacteristic(
       NUS_RX_UUID,
-      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC
+      NIMBLE_PROPERTY::WRITE
+        | NIMBLE_PROPERTY::WRITE_NR
+        | NIMBLE_PROPERTY::WRITE_ENC
   );
   g_rxChar->setCallbacks(new RxCallbacks());
 
-  svc->start();
+  // NimBLE 2.x: NimBLEService::start() is a deprecated no-op; services are
+  // started by NimBLEServer::start(). Without this, the GATT table is never
+  // registered and the central sees an empty service even though raw
+  // advertisements go out.
+  g_server->start();
 
+  // A BLE adv packet is 31 bytes. The NUS UUID alone is 18 bytes (16 + 2
+  // header) and `Claude-Pager-XXXX` is 17 chars — together they overflow,
+  // so NimBLE silently drops the name and Claude's name-prefix filter
+  // misses us. Put the UUID in the main adv and the name in the scan
+  // response, which the central fetches on the follow-up SCAN_REQ.
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
-  adv->addServiceUUID(NUS_SERVICE_UUID);
-  adv->setName(deviceName);
+
+  NimBLEAdvertisementData advData;
+  advData.setCompleteServices(NimBLEUUID(NUS_SERVICE_UUID));
+  adv->setAdvertisementData(advData);
+
+  NimBLEAdvertisementData scanResp;
+  scanResp.setName(deviceName, /*isComplete*/ true);
+  adv->setScanResponseData(scanResp);
+
   adv->enableScanResponse(true);
   adv->start();
 
@@ -132,19 +157,28 @@ bool sendLine(const std::string& line) {
   std::string payload = line;
   if (payload.empty() || payload.back() != '\n') payload.push_back('\n');
 
-  // Conservative chunk size. NimBLE negotiates MTU up from 23 but we don't
-  // query the active MTU here; 180 bytes fits a default ATT_MTU of 185 with
-  // room for the notify header.
-  constexpr size_t kChunk = 180;
+  // ATT notification carries up to (MTU - 3) bytes per packet. NimBLE
+  // typically negotiates MTU 255 with macOS, giving 252 usable bytes.
+  // 240 leaves a safety margin and keeps our 200-ish-byte status responses
+  // and most snapshots in a single notify, so Claude's reassembly logic
+  // never sees a split.
+  //
+  // Use the explicit notify(value, length) overload rather than setValue +
+  // notify(). The setValue path silently truncates against the local
+  // characteristic value buffer's capacity (NimBLE 2.x sizes that to the
+  // last advertised MTU on creation, before MTU is negotiated up), so a
+  // 182-byte response was going out as two 1-byte notifications.
+  constexpr size_t kChunk = 240;
   for (size_t off = 0; off < payload.size(); off += kChunk) {
     size_t n = std::min(kChunk, payload.size() - off);
-    g_txChar->setValue(reinterpret_cast<const uint8_t*>(payload.data()) + off, n);
-    g_txChar->notify();
+    g_txChar->notify(reinterpret_cast<const uint8_t*>(payload.data()) + off, n);
   }
   return true;
 }
 
 bool isSecure() { return g_isSecure; }
+
+const std::string& advertisedName() { return g_advertisedName; }
 
 void forgetBonds() { NimBLEDevice::deleteAllBonds(); }
 
