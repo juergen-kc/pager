@@ -1,7 +1,24 @@
 # Backlog
 
-Things noted during v1.0.0 bring-up that didn't make it in. None are
-blockers; the device is fully functional per `PAGER_SPEC.md` §9.
+Things noted during v1.0.0 bring-up that didn't make it in, plus
+follow-ups raised since. None are blockers; the device is fully
+functional per `PAGER_SPEC.md` §9.
+
+## Recently shipped (post-v1.0.0)
+
+- State-coloured status pill (green/amber/red/gray/violet).
+- Heartbeat `msg` surfaced as a subtitle on Glance.
+- Local clock in the top-right corner of Glance.
+- Token-burn sparkline above the today bar (~10 min of history).
+- Focus mode (long-press Glance to silence chime + dim backlight for
+  60 min; partly addresses the idle-dim item below).
+- RGB565 byte-order fix — text on the panel is now sharp instead of
+  chromatically fringed.
+- Status-response shape that satisfies Claude's `deviceStatus`
+  validator (full `bat`, `vel`/`nap` zeros).
+- MTU-aware notify chunking in `pager::ble::sendLine`.
+- Diagnostic scripts under `scripts/` (BLE GATT inspector, synthetic
+  prompt tester, persistent serial monitor, LVGL .S strip script).
 
 ## Polish
 
@@ -12,12 +29,20 @@ blockers; the device is fully functional per `PAGER_SPEC.md` §9.
 - **A nicer chime.** Currently two queued sine tones (A5 + C#6,
   90 ms each). PAGER_SPEC.md §10 left the door open to a short WAV on
   flash — would be a friendlier sound than raw oscillator pips.
-- **Idle-dim transition.** `IDLE_DIM_MS` is a hard 30 s; backlight
-  jumps from 220 → 40 instantly. Smoother fade and a tunable threshold
-  (NVS-backed) would be nicer.
+- **Smoother idle-dim transition + tunable threshold.** Focus mode
+  pins the backlight low when active, but the regular dim path still
+  steps 220 → 40 instantly after a hard `IDLE_DIM_MS = 30 s`. Fade
+  over ~500 ms and let the threshold be NVS-backed (Settings UI).
 - **Approval timing.** Spec §6.2 mentions a "fast approvals" counter
   (under 5 s); we track `appr`/`deny` counters but don't surface the
   velocity stat anywhere. Could go on Settings.
+- **Sparkline polish.** Currently logs whatever `tokens_today` delta
+  we measure each heartbeat. Two improvements worth considering:
+  fixed Y range (auto-scale makes a single big spike compress
+  everything else flat), and labelling the X axis ("last 10 min").
+- **Date below the clock.** Clock is HH:MM only; the BM8563 has the
+  full `tm` struct synced. Adding "Sat 26 Apr" under the time would
+  fit the top-right corner.
 
 ## Honest fields
 

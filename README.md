@@ -13,10 +13,10 @@ CoreS3 SE.
 
 ```
   ┌──────────────────────────────┐
-  │  Pager · connected           │
-  │                              │
-  │     2 running  ·  0 waiting  │
-  │                              │
+  │  Pager · working       14:23 │
+  │  approve: Bash               │
+  │     2 running  ·  1 waiting  │
+  │  ╱╲    ╱╲ ╱╲                 │
   │  ▓▓▓▓▓▓▓▓▓░░░░  31.2k today  │
   │                              │
   │  10:42  git push             │
@@ -122,12 +122,25 @@ prompt for an actual `pwsh` invocation:
 - Pairing with the LE Secure Connections passkey flow (DisplayOnly IO
   capability, AES-CCM-encrypted link, bond persists across reboots and
   host sleep/wake).
-- Ambient Glance view: counters, today's tokens (logarithmic scale), last
-  two transcript entries — updates within ~1 s of each heartbeat.
+- **Ambient Glance view** with everything you want to know in one screen:
+  - Status pill that colour-codes session state at a glance
+    (green=idle, amber=working, red=waiting, gray=disconnected,
+    violet=focus mode).
+  - Heartbeat `msg` rendered as a subtitle ("approve: Bash", "1 idle", …).
+  - Counters (running · waiting), today's tokens, last two transcript
+    entries from `snapshot.entries`.
+  - **Token-burn sparkline** above the today bar — last ~10 min of
+    per-tick deltas, so you can see whether you're sprinting or drifting.
+  - **Local clock** in the top-right (HH:MM, BM8563-backed, synced from
+    the desktop's `{"time":[epoch,tz]}`).
+  - Updates within ~1 s of each heartbeat.
 - **Approval takeover**: when a `prompt:`-bearing heartbeat arrives, the
   screen flips to a full-screen tool-call review with green Approve and
   hold-to-Deny. The decision round-trips back to the desktop in well
   under 500 ms.
+- **Focus mode**: long-press anywhere on Glance to silence the chime and
+  pin the backlight dim for 60 min. Re-press to exit early. Useful in
+  calls and meetings.
 - Recent view (PSRAM-backed ring of the last ~64 turn events).
 - Settings view (device name override, owner name, chime toggle,
   forget-bonds button).
