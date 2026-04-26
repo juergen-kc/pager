@@ -1,5 +1,6 @@
 #include "audio/chime.h"
 #include "persistence/store.h"
+#include "ui/views.h"
 
 #include <M5Unified.h>
 
@@ -14,6 +15,9 @@ void begin() {
 
 void chime() {
   if (!store::settings().chimeOn) return;
+  // Focus mode silences the chime even when the setting is on — the user
+  // explicitly opted into 60 min of quiet by long-pressing Glance.
+  if (ui::glance::focusActive()) return;
 
   // Two short sine pips a major-third apart. tone(freq, ms) is queued, so
   // we don't need to delay between calls — the second one waits its turn.

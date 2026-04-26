@@ -14,6 +14,12 @@ namespace pager::ui {
 namespace glance {
   void mount(lv_obj_t* parent);
   void refresh();
+
+  // Focus mode: long-press the Glance tile to silence the chime and
+  // force the backlight dim for 60 min. Auto-expires. Re-press exits
+  // early. Other modules (audio, router) check this to know whether
+  // to chime or override dimming.
+  bool focusActive();
 }
 
 namespace recent {

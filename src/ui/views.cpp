@@ -36,12 +36,41 @@ namespace glance {
 namespace {
 lv_obj_t* g_root         = nullptr;
 lv_obj_t* g_lblStatus    = nullptr;
+lv_obj_t* g_lblClock     = nullptr;
+lv_obj_t* g_lblMsg       = nullptr;
 lv_obj_t* g_lblCounters  = nullptr;
+lv_obj_t* g_spark        = nullptr;
+lv_chart_series_t* g_sparkSeries = nullptr;
 lv_obj_t* g_tokenBar     = nullptr;
 lv_obj_t* g_lblTokens    = nullptr;
 lv_obj_t* g_lblEntry1    = nullptr;
 lv_obj_t* g_lblEntry2    = nullptr;
+
+// Sparkline state — track tokens_today between heartbeats and derive a
+// per-tick delta (rate). 60 samples × ~10 s heartbeat ≈ 10 min of history.
+constexpr uint16_t kSparkSamples = 60;
+uint32_t g_lastTokens     = 0;
+bool     g_sparkPrimed    = false;
+
+// Focus mode — long-press to silence the chime + dim backlight for an hour.
+constexpr uint32_t kFocusDurationMs = 60u * 60u * 1000u;
+uint32_t g_focusUntilMs   = 0;
+
+void onLongPress(lv_event_t*) {
+  uint32_t now = lv_tick_get();
+  if (g_focusUntilMs > now) {
+    // Already in focus — long-press while active exits early.
+    g_focusUntilMs = 0;
+  } else {
+    g_focusUntilMs = now + kFocusDurationMs;
+  }
+  refresh();
+}
 } // namespace
+
+bool focusActive() {
+  return g_focusUntilMs > lv_tick_get();
+}
 
 void mount(lv_obj_t* parent) {
   if (g_root) return;
@@ -59,15 +88,46 @@ void mount(lv_obj_t* parent) {
   lv_obj_set_style_text_color(g_lblStatus, lv_color_hex(0x808080), 0);
   lv_label_set_text(g_lblStatus, "Pager · starting");
 
+  // Clock floats top-right; LV_OBJ_FLAG_IGNORE_LAYOUT keeps it out of
+  // the parent's flex column so it doesn't shove the rest of the view
+  // around. Reads "--:--" until the desktop sends a time sync.
+  g_lblClock = lv_label_create(g_root);
+  lv_obj_set_style_text_color(g_lblClock, lv_color_hex(0xC0C0C0), 0);
+  lv_obj_add_flag(g_lblClock, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_align(g_lblClock, LV_ALIGN_TOP_RIGHT, 0, 0);
+  lv_label_set_text(g_lblClock, "--:--");
+
+  g_lblMsg = lv_label_create(g_root);
+  lv_obj_set_style_text_color(g_lblMsg, lv_color_hex(0x707070), 0);
+  lv_obj_set_width(g_lblMsg, LV_PCT(100));
+  lv_label_set_long_mode(g_lblMsg, LV_LABEL_LONG_DOT);
+  lv_label_set_text(g_lblMsg, "");
+
   g_lblCounters = lv_label_create(g_root);
   lv_obj_set_style_text_font(g_lblCounters, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(g_lblCounters, lv_color_white(), 0);
   lv_obj_set_style_pad_top(g_lblCounters, 12, 0);
   lv_label_set_text(g_lblCounters, "0 running · 0 waiting");
 
+  // Sparkline: token-burn rate over the last ~10 min. Stripped of axes,
+  // grid, point markers — we just want the trace shape.
+  g_spark = lv_chart_create(g_root);
+  lv_obj_set_size(g_spark, LV_PCT(100), 24);
+  lv_obj_set_style_pad_top(g_spark, 16, 0);
+  lv_obj_set_style_pad_all(g_spark, 0, LV_PART_MAIN);
+  lv_obj_set_style_border_width(g_spark, 0, 0);
+  lv_obj_set_style_bg_opa(g_spark, LV_OPA_TRANSP, 0);
+  lv_chart_set_type(g_spark, LV_CHART_TYPE_LINE);
+  lv_chart_set_point_count(g_spark, kSparkSamples);
+  lv_chart_set_div_line_count(g_spark, 0, 0);
+  lv_chart_set_update_mode(g_spark, LV_CHART_UPDATE_MODE_SHIFT);
+  lv_obj_set_style_size(g_spark, 0, 0, LV_PART_INDICATOR);   // hide markers
+  lv_obj_set_style_line_width(g_spark, 2, LV_PART_ITEMS);
+  g_sparkSeries = lv_chart_add_series(g_spark, kAccent, LV_CHART_AXIS_PRIMARY_Y);
+
   g_tokenBar = lv_bar_create(g_root);
   lv_obj_set_size(g_tokenBar, LV_PCT(100), 8);
-  lv_obj_set_style_pad_top(g_tokenBar, 16, 0);
+  lv_obj_set_style_pad_top(g_tokenBar, 8, 0);
   lv_bar_set_range(g_tokenBar, 0, 1000);
   lv_bar_set_value(g_tokenBar, 0, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(g_tokenBar, lv_color_hex(0x202020), LV_PART_MAIN);
@@ -89,6 +149,11 @@ void mount(lv_obj_t* parent) {
   lv_obj_set_width(g_lblEntry2, LV_PCT(100));
   lv_label_set_long_mode(g_lblEntry2, LV_LABEL_LONG_DOT);
   lv_label_set_text(g_lblEntry2, "");
+
+  // Long-press anywhere on Glance toggles focus mode. Re-add CLICKABLE
+  // because remove_style_all() above stripped the default flag set.
+  lv_obj_add_flag(g_root, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(g_root, onLongPress, LV_EVENT_LONG_PRESSED, nullptr);
 }
 
 void refresh() {
@@ -97,12 +162,59 @@ void refresh() {
 
   uint32_t age = lv_tick_get() - s.lastSnapshotMs;
   bool stale = (s.lastSnapshotMs == 0) || (age > HEARTBEAT_STALE_MS);
-  lv_label_set_text(g_lblStatus, stale ? "Pager · disconnected" : "Pager · connected");
-  lv_obj_set_style_text_color(g_lblStatus,
-                              stale ? lv_color_hex(0x808080) : lv_color_hex(0x80E0A0), 0);
+
+  // Status pill colour-codes session state at a glance:
+  //   violet → focus mode active (overrides everything else)
+  //   gray   → no recent heartbeat
+  //   red    → at least one session blocked on a permission prompt
+  //   amber  → at least one session running
+  //   green  → connected, all sessions idle
+  char        focusBuf[24];
+  const char* label;
+  uint32_t    color;
+  if (focusActive()) {
+    uint32_t remainMin = (g_focusUntilMs - lv_tick_get() + 59'999) / 60'000;
+    snprintf(focusBuf, sizeof(focusBuf), "Pager · focus %um", (unsigned)remainMin);
+    label = focusBuf; color = 0xB080E0;
+  } else if (stale) {
+    label = "Pager · disconnected"; color = 0x808080;
+  } else if (s.counters.waiting > 0) {
+    label = "Pager · waiting";      color = 0xE85050;
+  } else if (s.counters.running > 0) {
+    label = "Pager · working";      color = 0xE0A040;
+  } else {
+    label = "Pager · idle";         color = 0x80E0A0;
+  }
+  lv_label_set_text(g_lblStatus, label);
+  lv_obj_set_style_text_color(g_lblStatus, lv_color_hex(color), 0);
+
+  // `msg` is the desktop's free-form one-line summary
+  // (REFERENCE.md: "suitable for a small display"). Hide the row when
+  // empty so the rest of the layout reflows tight.
+  if (s.msg.empty()) {
+    lv_obj_add_flag(g_lblMsg, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_remove_flag(g_lblMsg, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(g_lblMsg, s.msg.c_str());
+  }
+
+  lv_label_set_text(g_lblClock, system_clock::nowHHMM().c_str());
 
   lv_label_set_text_fmt(g_lblCounters, "%u running · %u waiting",
                         (unsigned)s.counters.running, (unsigned)s.counters.waiting);
+
+  // Sparkline sample: per-tick delta in tokens_today. The first refresh
+  // primes the baseline (we don't know the prior); midnight roll-over and
+  // any other backwards step gets clamped to 0 so we never draw a dip.
+  uint32_t delta = 0;
+  if (g_sparkPrimed && s.tokensToday > g_lastTokens) {
+    delta = s.tokensToday - g_lastTokens;
+  }
+  g_lastTokens  = s.tokensToday;
+  g_sparkPrimed = true;
+  if (g_spark && g_sparkSeries) {
+    lv_chart_set_next_value(g_spark, g_sparkSeries, (lv_coord_t)std::min<uint32_t>(delta, INT16_MAX));
+  }
 
   // Logarithmic scaling: log10(1+n)/log10(1+peak) maps current → 0..1000.
   // Visually forgiving (no big jumps) and needs no persisted ceiling beyond

@@ -117,6 +117,16 @@ void hidePasskey() { passkey::hide(); }
 void tickPasskey() { passkey::tick(); }
 
 void serviceIdleDimming() {
+  // Focus mode pins the backlight low regardless of touch activity —
+  // the whole point is to keep the device unobtrusive during a call.
+  if (glance::focusActive()) {
+    if (!g_dimmed) {
+      lvgl_port::setBacklight(40);
+      g_dimmed = true;
+    }
+    return;
+  }
+
   // Any actual touch (not just a hover pass-through) resets the timer.
   auto t = M5.Touch.getDetail(0);
   if (t.isPressed()) {
