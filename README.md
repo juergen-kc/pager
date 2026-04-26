@@ -13,14 +13,15 @@ CoreS3 SE.
 
 ```
   ┌──────────────────────────────┐
-  │  Pager · working       14:23 │
-  │  approve: Bash               │
-  │     2 running  ·  1 waiting  │
-  │  ╱╲    ╱╲ ╱╲                 │
-  │  ▓▓▓▓▓▓▓▓▓░░░░  31.2k today  │
+  │  Pager - working       14:23 │
+  │  approve: Bash      Sun 26   │
+  │     2 running, 1 waiting     │
+  │  /\    /\ /\                 │
+  │  ▓▓▓▓▓▓▓▓░░░░  31.2k (~480)  │
   │                              │
   │  10:42  git push             │
   │  10:41  yarn test            │
+  │  active now                  │
   └──────────────────────────────┘
 ```
 

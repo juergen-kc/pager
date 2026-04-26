@@ -99,7 +99,7 @@ void mount(lv_obj_t* parent) {
 
   g_lblStatus = lv_label_create(g_root);
   lv_obj_set_style_text_color(g_lblStatus, lv_color_hex(0x808080), 0);
-  lv_label_set_text(g_lblStatus, "Pager · starting");
+  lv_label_set_text(g_lblStatus, "Pager - starting");
 
   // Clock + date float top-right; LV_OBJ_FLAG_IGNORE_LAYOUT keeps them
   // out of the parent's flex column. Read "--:--" / "--" until the
@@ -126,7 +126,7 @@ void mount(lv_obj_t* parent) {
   lv_obj_set_style_text_font(g_lblCounters, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_color(g_lblCounters, lv_color_white(), 0);
   lv_obj_set_style_pad_top(g_lblCounters, 12, 0);
-  lv_label_set_text(g_lblCounters, "0 running · 0 waiting");
+  lv_label_set_text(g_lblCounters, "0 running, 0 waiting");
 
   // Sparkline: token-burn rate over the last ~10 min. Stripped of axes,
   // grid, point markers — we just want the trace shape.
@@ -198,16 +198,16 @@ void refresh() {
   uint32_t    color;
   if (focusActive()) {
     uint32_t remainMin = (g_focusUntilMs - lv_tick_get() + 59'999) / 60'000;
-    snprintf(focusBuf, sizeof(focusBuf), "Pager · focus %um", (unsigned)remainMin);
+    snprintf(focusBuf, sizeof(focusBuf), "Pager - focus %um", (unsigned)remainMin);
     label = focusBuf; color = 0xB080E0;
   } else if (stale) {
-    label = "Pager · disconnected"; color = 0x808080;
+    label = "Pager - disconnected"; color = 0x808080;
   } else if (s.counters.waiting > 0) {
-    label = "Pager · waiting";      color = 0xE85050;
+    label = "Pager - waiting";      color = 0xE85050;
   } else if (s.counters.running > 0) {
-    label = "Pager · working";      color = 0xE0A040;
+    label = "Pager - working";      color = 0xE0A040;
   } else {
-    label = "Pager · idle";         color = 0x80E0A0;
+    label = "Pager - idle";         color = 0x80E0A0;
   }
   lv_label_set_text(g_lblStatus, label);
   lv_obj_set_style_text_color(g_lblStatus, lv_color_hex(color), 0);
@@ -225,7 +225,7 @@ void refresh() {
   lv_label_set_text(g_lblClock, system_clock::nowHHMM().c_str());
   lv_label_set_text(g_lblDate,  system_clock::nowDate().c_str());
 
-  lv_label_set_text_fmt(g_lblCounters, "%u running · %u waiting",
+  lv_label_set_text_fmt(g_lblCounters, "%u running, %u waiting",
                         (unsigned)s.counters.running, (unsigned)s.counters.waiting);
 
   // Sparkline sample: per-tick delta in tokens_today. The first refresh
@@ -271,7 +271,7 @@ void refresh() {
   for (uint32_t v : g_burnRing) burnSum += v;
   uint32_t burnPerMin = (burnSum * 60u) / (kBurnWindow * 10u);  // 10s heartbeat
   if (burnPerMin >= 10) {
-    lv_label_set_text_fmt(g_lblTokens, "%s today  ·  ≈%u/min", tokBuf, (unsigned)burnPerMin);
+    lv_label_set_text_fmt(g_lblTokens, "%s today (~%u/min)", tokBuf, (unsigned)burnPerMin);
   } else {
     lv_label_set_text_fmt(g_lblTokens, "%s tokens today", tokBuf);
   }
