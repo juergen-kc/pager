@@ -37,6 +37,7 @@ namespace {
 lv_obj_t* g_root         = nullptr;
 lv_obj_t* g_lblStatus    = nullptr;
 lv_obj_t* g_lblClock     = nullptr;
+lv_obj_t* g_lblDate      = nullptr;
 lv_obj_t* g_lblMsg       = nullptr;
 lv_obj_t* g_lblCounters  = nullptr;
 lv_obj_t* g_spark        = nullptr;
@@ -45,12 +46,24 @@ lv_obj_t* g_tokenBar     = nullptr;
 lv_obj_t* g_lblTokens    = nullptr;
 lv_obj_t* g_lblEntry1    = nullptr;
 lv_obj_t* g_lblEntry2    = nullptr;
+lv_obj_t* g_lblFooter    = nullptr;
 
 // Sparkline state — track tokens_today between heartbeats and derive a
 // per-tick delta (rate). 60 samples × ~10 s heartbeat ≈ 10 min of history.
 constexpr uint16_t kSparkSamples = 60;
 uint32_t g_lastTokens     = 0;
 bool     g_sparkPrimed    = false;
+
+// Short ring of recent deltas, used to compute the "≈X tok/min" label.
+// 6 × 10 s heartbeat ≈ 1 min window.
+constexpr int      kBurnWindow      = 6;
+uint32_t           g_burnRing[kBurnWindow] = {0};
+int                g_burnHead       = 0;
+
+// Time of the most recent activity we can detect — last heartbeat that
+// reported running > 0, waiting > 0, or a non-zero token delta. Used to
+// drive the "idle 4m" / "active now" footer.
+uint32_t           g_lastActiveMs   = 0;
 
 // Focus mode — long-press to silence the chime + dim backlight for an hour.
 constexpr uint32_t kFocusDurationMs = 60u * 60u * 1000u;
@@ -88,14 +101,20 @@ void mount(lv_obj_t* parent) {
   lv_obj_set_style_text_color(g_lblStatus, lv_color_hex(0x808080), 0);
   lv_label_set_text(g_lblStatus, "Pager · starting");
 
-  // Clock floats top-right; LV_OBJ_FLAG_IGNORE_LAYOUT keeps it out of
-  // the parent's flex column so it doesn't shove the rest of the view
-  // around. Reads "--:--" until the desktop sends a time sync.
+  // Clock + date float top-right; LV_OBJ_FLAG_IGNORE_LAYOUT keeps them
+  // out of the parent's flex column. Read "--:--" / "--" until the
+  // desktop sends a time sync.
   g_lblClock = lv_label_create(g_root);
   lv_obj_set_style_text_color(g_lblClock, lv_color_hex(0xC0C0C0), 0);
   lv_obj_add_flag(g_lblClock, LV_OBJ_FLAG_IGNORE_LAYOUT);
   lv_obj_align(g_lblClock, LV_ALIGN_TOP_RIGHT, 0, 0);
   lv_label_set_text(g_lblClock, "--:--");
+
+  g_lblDate = lv_label_create(g_root);
+  lv_obj_set_style_text_color(g_lblDate, lv_color_hex(0x808080), 0);
+  lv_obj_add_flag(g_lblDate, LV_OBJ_FLAG_IGNORE_LAYOUT);
+  lv_obj_align(g_lblDate, LV_ALIGN_TOP_RIGHT, 0, 16);
+  lv_label_set_text(g_lblDate, "--");
 
   g_lblMsg = lv_label_create(g_root);
   lv_obj_set_style_text_color(g_lblMsg, lv_color_hex(0x707070), 0);
@@ -150,6 +169,11 @@ void mount(lv_obj_t* parent) {
   lv_label_set_long_mode(g_lblEntry2, LV_LABEL_LONG_DOT);
   lv_label_set_text(g_lblEntry2, "");
 
+  g_lblFooter = lv_label_create(g_root);
+  lv_obj_set_style_text_color(g_lblFooter, lv_color_hex(0x707070), 0);
+  lv_obj_set_style_pad_top(g_lblFooter, 8, 0);
+  lv_label_set_text(g_lblFooter, "");
+
   // Long-press anywhere on Glance toggles focus mode. Re-add CLICKABLE
   // because remove_style_all() above stripped the default flag set.
   lv_obj_add_flag(g_root, LV_OBJ_FLAG_CLICKABLE);
@@ -199,6 +223,7 @@ void refresh() {
   }
 
   lv_label_set_text(g_lblClock, system_clock::nowHHMM().c_str());
+  lv_label_set_text(g_lblDate,  system_clock::nowDate().c_str());
 
   lv_label_set_text_fmt(g_lblCounters, "%u running · %u waiting",
                         (unsigned)s.counters.running, (unsigned)s.counters.waiting);
@@ -216,6 +241,16 @@ void refresh() {
     lv_chart_set_next_value(g_spark, g_sparkSeries, (lv_coord_t)std::min<uint32_t>(delta, INT16_MAX));
   }
 
+  // Burn ring (last ~1 min) + activity timestamp. Anything that suggests
+  // the host actually did something — running, waiting, or a token bump —
+  // counts as "active now". The footer below uses the last-active time.
+  g_burnRing[g_burnHead] = delta;
+  g_burnHead = (g_burnHead + 1) % kBurnWindow;
+  uint32_t nowMs = lv_tick_get();
+  if (s.counters.running > 0 || s.counters.waiting > 0 || delta > 0) {
+    g_lastActiveMs = nowMs;
+  }
+
   // Logarithmic scaling: log10(1+n)/log10(1+peak) maps current → 0..1000.
   // Visually forgiving (no big jumps) and needs no persisted ceiling beyond
   // the in-memory rolling peak we already track.
@@ -228,7 +263,18 @@ void refresh() {
 
   char tokBuf[16];
   formatTokens(s.tokensToday, tokBuf, sizeof(tokBuf));
-  lv_label_set_text_fmt(g_lblTokens, "%s tokens today", tokBuf);
+
+  // Burn rate: average of the last-minute window × 6 ≈ tokens/min.
+  // Shown only when there's a non-trivial signal — otherwise the line
+  // is just "X tokens today" without the rate suffix.
+  uint32_t burnSum = 0;
+  for (uint32_t v : g_burnRing) burnSum += v;
+  uint32_t burnPerMin = (burnSum * 60u) / (kBurnWindow * 10u);  // 10s heartbeat
+  if (burnPerMin >= 10) {
+    lv_label_set_text_fmt(g_lblTokens, "%s today  ·  ≈%u/min", tokBuf, (unsigned)burnPerMin);
+  } else {
+    lv_label_set_text_fmt(g_lblTokens, "%s tokens today", tokBuf);
+  }
 
   // Last two entries from the snapshot. Spec: most recent first.
   auto setEntry = [](lv_obj_t* lbl, const state::EntryLine* e) {
@@ -240,6 +286,23 @@ void refresh() {
   };
   setEntry(g_lblEntry1, s.entries.size() >= 1 ? &s.entries[0] : nullptr);
   setEntry(g_lblEntry2, s.entries.size() >= 2 ? &s.entries[1] : nullptr);
+
+  // Footer: time since last activity, or "active now" if anything's
+  // currently happening. Hidden until we've seen at least one event.
+  if (s.counters.running > 0 || s.counters.waiting > 0) {
+    lv_label_set_text(g_lblFooter, "active now");
+  } else if (g_lastActiveMs == 0) {
+    lv_label_set_text(g_lblFooter, "");
+  } else {
+    uint32_t idleSec = (nowMs - g_lastActiveMs) / 1000u;
+    char buf[24];
+    if (idleSec < 60)         snprintf(buf, sizeof(buf), "idle %us",   (unsigned)idleSec);
+    else if (idleSec < 3600)  snprintf(buf, sizeof(buf), "idle %um",   (unsigned)(idleSec / 60));
+    else                      snprintf(buf, sizeof(buf), "idle %uh%um",
+                                        (unsigned)(idleSec / 3600),
+                                        (unsigned)((idleSec % 3600) / 60));
+    lv_label_set_text(g_lblFooter, buf);
+  }
 }
 
 } // namespace glance

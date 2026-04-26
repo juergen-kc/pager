@@ -68,4 +68,14 @@ std::string formatHHMM(uint32_t epoch) {
 
 std::string nowHHMM() { return formatHHMM(nowEpoch()); }
 
+std::string nowDate() {
+  if (!g_hasSync) return "--";
+  time_t t = static_cast<time_t>(nowEpoch() + g_tzOffset);
+  struct tm tm;
+  gmtime_r(&t, &tm);
+  char buf[16];
+  strftime(buf, sizeof(buf), "%a %d %b", &tm);
+  return std::string(buf);
+}
+
 } // namespace pager::system_clock

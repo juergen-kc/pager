@@ -8,8 +8,10 @@ functional per `PAGER_SPEC.md` §9.
 
 - State-coloured status pill (green/amber/red/gray/violet).
 - Heartbeat `msg` surfaced as a subtitle on Glance.
-- Local clock in the top-right corner of Glance.
-- Token-burn sparkline above the today bar (~10 min of history).
+- Local clock + date in the top-right corner of Glance.
+- Token-burn sparkline above the today bar (~10 min of history) and
+  rolling burn-rate label (`≈X/min`) on the today line.
+- Idle / active-now footer at the bottom of Glance.
 - Focus mode (long-press Glance to silence chime + dim backlight for
   60 min; partly addresses the idle-dim item below).
 - RGB565 byte-order fix — text on the panel is now sharp instead of
@@ -40,9 +42,13 @@ functional per `PAGER_SPEC.md` §9.
   we measure each heartbeat. Two improvements worth considering:
   fixed Y range (auto-scale makes a single big spike compress
   everything else flat), and labelling the X axis ("last 10 min").
-- **Date below the clock.** Clock is HH:MM only; the BM8563 has the
-  full `tm` struct synced. Adding "Sat 26 Apr" under the time would
-  fit the top-right corner.
+- **ESC / cancel button.** No-op today: REFERENCE.md only documents
+  four device → desktop verbs (`permission`, `name`, `owner`, `unpair`)
+  and Claude Desktop silently drops anything else, so an on-device
+  cancel button has nothing to bind to. Worth revisiting if Anthropic
+  adds an `interrupt` / `stop` verb upstream — at that point a single
+  big ESC on Glance becomes useful for "stop generating" while a
+  session is `running`.
 
 ## Honest fields
 

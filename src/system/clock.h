@@ -28,4 +28,8 @@ std::string nowHHMM();
 // Format an arbitrary epoch as "HH:MM" in the synced timezone. Same fallback.
 std::string formatHHMM(uint32_t epoch);
 
+// Short date string in the synced timezone, e.g. "Sat 26 Apr". Returns
+// "--" if no time sync has happened yet.
+std::string nowDate();
+
 } // namespace pager::system_clock
