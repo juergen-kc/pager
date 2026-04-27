@@ -6,6 +6,10 @@ functional per `PAGER_SPEC.md` §9.
 
 ## Recently shipped (post-v1.0.0)
 
+- Bezel-button bindings on the CoreS3 SE touch strip below the LCD —
+  M5.BtnA/B/C virtualise three zones at Y≈267-279. Right = Approve /
+  left hold = Deny on the approval modal (mirrors the on-screen
+  layout), centre = focus toggle on Glance. Verified on hardware.
 - State-coloured status pill (green/amber/red/gray/violet).
 - Heartbeat `msg` surfaced as a subtitle on Glance.
 - Local clock + date in the top-right corner of Glance.

@@ -14,6 +14,7 @@ namespace {
 Hooks       g_hooks;
 lv_obj_t*   g_root      = nullptr;
 lv_obj_t*   g_tileview  = nullptr;
+lv_obj_t*   g_tGlance   = nullptr;
 bool        g_modalOn   = false;
 uint32_t    g_lastTouchMs = 0;
 bool        g_dimmed   = false;
@@ -47,13 +48,23 @@ void begin(const Hooks& hooks) {
   lv_obj_set_size(g_tileview, LV_PCT(100), LV_PCT(100));
   lv_obj_set_scroll_dir(g_tileview, LV_DIR_HOR);
 
-  lv_obj_t* tGlance   = lv_tileview_add_tile(g_tileview, 0, 0, LV_DIR_RIGHT);
+  g_tGlance           = lv_tileview_add_tile(g_tileview, 0, 0, LV_DIR_RIGHT);
   lv_obj_t* tRecent   = lv_tileview_add_tile(g_tileview, 1, 0, LV_DIR_HOR);
   lv_obj_t* tSettings = lv_tileview_add_tile(g_tileview, 2, 0, LV_DIR_LEFT);
 
-  glance::mount(tGlance);
+  glance::mount(g_tGlance);
   recent::mount(tRecent);
   settings::mount(tSettings);
+
+  // Seed tile_act explicitly — lv_tileview_get_tile_active() reads that
+  // field, and it stays nullptr until the user actually scrolls away and
+  // back, which would make the BtnB-on-Glance gate fail on first boot.
+  lv_tileview_set_tile(g_tileview, g_tGlance, LV_ANIM_OFF);
+
+  // Match the Deny long-press window for the bezel BtnA so the physical
+  // hold-to-deny gesture mirrors the on-screen one. Deny sits bottom-left
+  // on the approval modal, so the left bezel button is the hold target.
+  M5.BtnA.setHoldThresh(DENY_HOLD_MS);
 
   approval::mount(g_root);
   passkey::mount(g_root);
@@ -140,6 +151,27 @@ void serviceIdleDimming() {
   if (!g_dimmed && (lv_tick_get() - g_lastTouchMs) > IDLE_DIM_MS) {
     lvgl_port::setBacklight(40);
     g_dimmed = true;
+  }
+}
+
+void serviceButtons() {
+  // Swallow input while the passkey screen owns the display — we don't
+  // want a stray bezel tap during pairing to fire approve/deny against
+  // a stale prompt id, or toggle focus behind the overlay.
+  if (lv_screen_active() != g_root) return;
+
+  if (approval::isVisible()) {
+    // Mirror the on-screen modal's layout: red Deny is bottom-left, green
+    // Approve is bottom-right, so the left bezel button is hold-to-deny
+    // and the right bezel button is single-tap approve.
+    if (M5.BtnA.wasHold())    approval::deny();
+    if (M5.BtnC.wasPressed()) approval::approve();
+    return;
+  }
+
+  // Glance-only: BtnB mirrors the existing long-press focus toggle.
+  if (g_tGlance && lv_tileview_get_tile_active(g_tileview) == g_tGlance) {
+    if (M5.BtnB.wasPressed()) glance::toggleFocus();
   }
 }
 

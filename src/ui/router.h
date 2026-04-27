@@ -34,6 +34,13 @@ void onPromptArrived();
 // Call from the main loop.
 void serviceIdleDimming();
 
+// Polls the bezel touch strip (M5.BtnA/B/C) and dispatches based on the
+// current view: A = hold-to-deny / C = approve while the approval modal is
+// up (mirrors the on-screen left-deny / right-approve layout), B = toggle
+// focus mode while Glance is the active tile. Call from the main loop
+// after M5.update().
+void serviceButtons();
+
 // Surface the pairing passkey full-screen. Auto-hides after the user has had
 // time to enter it on the host (handled inside the passkey view).
 void showPasskey(unsigned int code);

@@ -69,20 +69,21 @@ uint32_t           g_lastActiveMs   = 0;
 constexpr uint32_t kFocusDurationMs = 60u * 60u * 1000u;
 uint32_t g_focusUntilMs   = 0;
 
-void onLongPress(lv_event_t*) {
+void onLongPress(lv_event_t*) { toggleFocus(); }
+} // namespace
+
+bool focusActive() {
+  return g_focusUntilMs > lv_tick_get();
+}
+
+void toggleFocus() {
   uint32_t now = lv_tick_get();
   if (g_focusUntilMs > now) {
-    // Already in focus — long-press while active exits early.
     g_focusUntilMs = 0;
   } else {
     g_focusUntilMs = now + kFocusDurationMs;
   }
   refresh();
-}
-} // namespace
-
-bool focusActive() {
-  return g_focusUntilMs > lv_tick_get();
 }
 
 void mount(lv_obj_t* parent) {
@@ -545,6 +546,13 @@ void denyCb(lv_event_t* e) {
 } // namespace
 
 void setDecideCallback(DecideCb cb) { g_decideCb = cb; }
+
+bool isVisible() {
+  return g_overlay && !lv_obj_has_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
+}
+
+void approve() { if (g_decideCb) g_decideCb("once", g_promptIdSnap); }
+void deny()    { if (g_decideCb) g_decideCb("deny", g_promptIdSnap); }
 
 void mount(lv_obj_t* root) {
   if (g_overlay) return;

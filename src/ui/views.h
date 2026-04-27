@@ -20,6 +20,10 @@ namespace glance {
   // early. Other modules (audio, router) check this to know whether
   // to chime or override dimming.
   bool focusActive();
+
+  // Same toggle the long-press gesture invokes — exposed so the bezel
+  // BtnB can drive focus mode without faking a synthetic touch event.
+  void toggleFocus();
 }
 
 namespace recent {
@@ -53,6 +57,16 @@ namespace approval {
   void show();
   void hide();
   void refresh();
+
+  // True while the modal is on screen — the router consults this to gate
+  // bezel-button dispatch (BtnA/C only fire approve/deny when visible).
+  bool isVisible();
+
+  // Programmatic equivalents of tapping the green Approve button and
+  // hold-releasing the red Deny button. Both go through the same decision
+  // callback as the touch path, so the prompt-id snapshot logic still applies.
+  void approve();
+  void deny();
 
   // Decision callback receives "once" or "deny" plus the prompt id.
   using DecideCb = void (*)(const char* decision, const char* id);

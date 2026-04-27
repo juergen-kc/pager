@@ -184,6 +184,7 @@ void loop() {
   drainPairingComplete();
   drainInbound();
 
+  pager::ui::router::serviceButtons();
   pager::ui::router::serviceIdleDimming();
   pager::ui::router::tickPasskey();
 

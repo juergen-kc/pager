@@ -139,9 +139,13 @@ prompt for an actual `pwsh` invocation:
   screen flips to a full-screen tool-call review with green Approve and
   hold-to-Deny. The decision round-trips back to the desktop in well
   under 500 ms.
-- **Focus mode**: long-press anywhere on Glance to silence the chime and
-  pin the backlight dim for 60 min. Re-press to exit early. Useful in
-  calls and meetings.
+- **Bezel buttons** (the three orange marks below the LCD on the CoreS3
+  SE): tap right = Approve, hold left ~400 ms = Deny while an approval
+  is up; tap centre on Glance to toggle focus mode. Mirrors the on-screen
+  layout, so you can act on a prompt without reaching for the screen.
+- **Focus mode**: long-press anywhere on Glance — or tap the centre
+  bezel button — to silence the chime and pin the backlight dim for
+  60 min. Re-press to exit early. Useful in calls and meetings.
 - Recent view (PSRAM-backed ring of the last ~64 turn events).
 - Settings view (device name override, owner name, chime toggle,
   forget-bonds button).
