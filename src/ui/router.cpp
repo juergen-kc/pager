@@ -161,11 +161,21 @@ void serviceButtons() {
   if (lv_screen_active() != g_root) return;
 
   if (approval::isVisible()) {
-    // Mirror the on-screen modal's layout: red Deny is bottom-left, green
-    // Approve is bottom-right, so the left bezel button is hold-to-deny
-    // and the right bezel button is single-tap approve.
+#ifdef PAGER_BOARD_DIAL
+    // M5Stack Dial has only one front-face button — the encoder push,
+    // which M5Unified surfaces as BtnA. Tap = approve, hold = deny.
+    // wasClicked() and wasHold() are mutually exclusive on the same
+    // press, so a slow hold won't fire approve on release.
+    if (M5.BtnA.wasClicked()) approval::approve();
+    if (M5.BtnA.wasHold())    approval::deny();
+#else
+    // CoreS3 SE: mirror the on-screen modal's layout — red Deny is
+    // bottom-left, green Approve is bottom-right, so the left bezel
+    // button is hold-to-deny and the right bezel button is single-tap
+    // approve.
     if (M5.BtnA.wasHold())    approval::deny();
     if (M5.BtnC.wasPressed()) approval::approve();
+#endif
     return;
   }
 

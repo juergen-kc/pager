@@ -34,11 +34,14 @@ void onPromptArrived();
 // Call from the main loop.
 void serviceIdleDimming();
 
-// Polls the bezel touch strip (M5.BtnA/B/C) and dispatches based on the
-// current view: A = hold-to-deny / C = approve while the approval modal is
-// up (mirrors the on-screen left-deny / right-approve layout), B = toggle
-// focus mode while Glance is the active tile. Call from the main loop
-// after M5.update().
+// Polls the device buttons and dispatches based on the current view and
+// target board. On CoreS3 SE the bezel touch strip exposes A/B/C: A hold
+// = deny / C tap = approve on the approval modal (mirrors the on-screen
+// left-deny / right-approve layout), B = toggle focus on Glance. On the
+// M5Stack Dial there's only one front-face button — the encoder push —
+// which surfaces as BtnA, so it does both modal actions (tap = approve,
+// hold = deny). The side button still acts as BtnB and toggles focus.
+// Call from the main loop after M5.update().
 void serviceButtons();
 
 // Surface the pairing passkey full-screen. Auto-hides after the user has had
