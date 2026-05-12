@@ -162,12 +162,11 @@ void serviceButtons() {
 
   if (approval::isVisible()) {
 #ifdef PAGER_BOARD_DIAL
-    // M5Stack Dial has only one front-face button — the encoder push,
-    // which M5Unified surfaces as BtnA. Tap = approve, hold = deny.
-    // wasClicked() and wasHold() are mutually exclusive on the same
-    // press, so a slow hold won't fire approve on release.
-    if (M5.BtnA.wasClicked()) approval::approve();
-    if (M5.BtnA.wasHold())    approval::deny();
+    // M5Stack Dial uses rotate-then-press: encoder rotation arms a side
+    // (see serviceEncoder), then the encoder push commits it. A press
+    // without sufficient rotation is a no-op — the on-screen buttons
+    // remain the no-rotation fallback via touch.
+    if (M5.BtnA.wasPressed()) approval::commitIfArmed();
 #else
     // CoreS3 SE: mirror the on-screen modal's layout — red Deny is
     // bottom-left, green Approve is bottom-right, so the left bezel
@@ -183,6 +182,14 @@ void serviceButtons() {
   if (g_tGlance && lv_tileview_get_tile_active(g_tileview) == g_tGlance) {
     if (M5.BtnB.wasPressed()) glance::toggleFocus();
   }
+}
+
+void serviceEncoder(int32_t encoderDelta) {
+  // Both calls are no-ops when the approval modal isn't visible, so the
+  // main loop can call this unconditionally on boards with an encoder
+  // without paying for a visibility check here.
+  approval::onEncoderDelta(encoderDelta);
+  approval::tickCommitment();
 }
 
 } // namespace pager::ui::router

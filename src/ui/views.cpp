@@ -526,12 +526,76 @@ lv_obj_t*  g_lblTool   = nullptr;
 lv_obj_t*  g_lblHint   = nullptr;
 lv_obj_t*  g_btnDeny   = nullptr;
 lv_obj_t*  g_btnAppr   = nullptr;
+lv_obj_t*  g_arcAppr   = nullptr;   // green CW-fill from top center
+lv_obj_t*  g_arcDeny   = nullptr;   // red CCW-fill from top center
+lv_obj_t*  g_lblPress  = nullptr;   // "press to Approve/Deny" when armed
 DecideCb   g_decideCb  = nullptr;
 
 // We snapshot the prompt id at show() so a late-arriving snapshot that
 // changes the active id can't cause us to send a decision against the
 // wrong prompt.
 char       g_promptIdSnap[64] = {0};
+
+// Dial commitment state. The encoder feeds quarter-ticks (~40 per full
+// turn for the Dial's encoder); arming at ~⅓ turn keeps the gesture
+// meaningful without requiring a full rotation. Decay nudges commitment
+// back to zero after a half-second of no input so accidental brushes
+// don't quietly arm a decision.
+constexpr int32_t  kArmThreshold = 15;
+constexpr uint32_t kDecayAfterMs = 500;
+constexpr uint32_t kDecayPeriodMs = 80;   // one tick decayed per period
+int32_t  g_commitment   = 0;
+uint32_t g_lastInputMs  = 0;
+uint32_t g_lastDecayMs  = 0;
+
+// LVGL arc angles: 0° = 3 o'clock, increasing clockwise. Top center = 270°.
+constexpr uint16_t kArcTop = 270;
+constexpr uint16_t kArcMaxSweep = 180;   // arc fills up to a half-circle
+
+void updateArcs() {
+  if (!g_arcAppr || !g_arcDeny) return;
+  const int32_t mag = g_commitment < 0 ? -g_commitment : g_commitment;
+  const bool armed = mag >= kArmThreshold;
+  const uint32_t sweep = static_cast<uint32_t>(
+      armed ? kArcMaxSweep : (mag * kArcMaxSweep) / kArmThreshold);
+
+  if (g_commitment > 0) {
+    lv_obj_clear_flag(g_arcAppr, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_arcDeny, LV_OBJ_FLAG_HIDDEN);
+    lv_arc_set_angles(g_arcAppr, kArcTop, (kArcTop + sweep) % 360);
+    // Brighten past the arm threshold so the user sees they're committed.
+    lv_obj_set_style_arc_color(g_arcAppr,
+        lv_color_hex(armed ? 0x30E030 : 0x205020),
+        LV_PART_INDICATOR);
+  } else if (g_commitment < 0) {
+    lv_obj_clear_flag(g_arcDeny, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_arcAppr, LV_OBJ_FLAG_HIDDEN);
+    lv_arc_set_angles(g_arcDeny, (kArcTop + 360 - sweep) % 360, kArcTop);
+    lv_obj_set_style_arc_color(g_arcDeny,
+        lv_color_hex(armed ? 0xE03030 : 0x502020),
+        LV_PART_INDICATOR);
+  } else {
+    lv_obj_add_flag(g_arcAppr, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_arcDeny, LV_OBJ_FLAG_HIDDEN);
+  }
+
+  // Hint label — only appears once the commitment is past the threshold,
+  // so the gesture is discoverable without crowding the modal during the
+  // rotation phase. Pulled in by user testing: an experienced operator
+  // could rotate but didn't know to push, and fell back to touch.
+  if (!g_lblPress) return;
+  if (armed && g_commitment > 0) {
+    lv_label_set_text(g_lblPress, "press to Approve");
+    lv_obj_set_style_text_color(g_lblPress, lv_color_hex(0x30E030), 0);
+    lv_obj_clear_flag(g_lblPress, LV_OBJ_FLAG_HIDDEN);
+  } else if (armed && g_commitment < 0) {
+    lv_label_set_text(g_lblPress, "press to Deny");
+    lv_obj_set_style_text_color(g_lblPress, lv_color_hex(0xE03030), 0);
+    lv_obj_clear_flag(g_lblPress, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(g_lblPress, LV_OBJ_FLAG_HIDDEN);
+  }
+}
 
 void approveCb(lv_event_t* e) {
   if (g_decideCb) g_decideCb("once", g_promptIdSnap);
@@ -554,6 +618,38 @@ bool isVisible() {
 void approve() { if (g_decideCb) g_decideCb("once", g_promptIdSnap); }
 void deny()    { if (g_decideCb) g_decideCb("deny", g_promptIdSnap); }
 
+void onEncoderDelta(int32_t ticks) {
+  if (ticks == 0 || !isVisible()) return;
+  g_commitment += ticks;
+  g_lastInputMs = lv_tick_get();
+  g_lastDecayMs = g_lastInputMs;
+  updateArcs();
+}
+
+bool commitIfArmed() {
+  if (!isVisible()) return false;
+  if (g_commitment >= kArmThreshold) {
+    if (g_decideCb) g_decideCb("once", g_promptIdSnap);
+    return true;
+  }
+  if (g_commitment <= -kArmThreshold) {
+    if (g_decideCb) g_decideCb("deny", g_promptIdSnap);
+    return true;
+  }
+  return false;
+}
+
+void tickCommitment() {
+  if (!isVisible() || g_commitment == 0) return;
+  const uint32_t now = lv_tick_get();
+  if (now - g_lastInputMs < kDecayAfterMs) return;
+  if (now - g_lastDecayMs < kDecayPeriodMs) return;
+  g_lastDecayMs = now;
+  if (g_commitment > 0)      g_commitment--;
+  else if (g_commitment < 0) g_commitment++;
+  updateArcs();
+}
+
 void mount(lv_obj_t* root) {
   if (g_overlay) return;
 
@@ -564,6 +660,36 @@ void mount(lv_obj_t* root) {
   lv_obj_set_style_bg_opa(g_overlay, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(g_overlay, 12, 0);
   lv_obj_add_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
+
+  // Commitment arcs created first so labels and buttons render on top of
+  // them. Size to the full overlay; on the Dial (240×240) the arc just
+  // hugs the panel edge, on the CoreS3 SE it draws across the 320×240
+  // landscape — that's fine, they only become visible on a Dial because
+  // nothing feeds them onEncoderDelta() on the CoreS3 SE. Non-clickable
+  // so taps still reach the on-screen Approve / Deny buttons underneath.
+  auto buildArc = [&](lv_obj_t** dst) {
+    lv_obj_t* arc = lv_arc_create(g_overlay);
+    lv_obj_set_size(arc, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(arc);
+    lv_arc_set_rotation(arc, 0);
+    lv_arc_set_bg_angles(arc, 0, 0);          // hide the background ring
+    lv_obj_remove_style(arc, nullptr, LV_PART_KNOB);  // no draggable knob
+    lv_obj_set_style_arc_width(arc, 10, LV_PART_INDICATOR);
+    lv_obj_remove_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(arc, LV_OBJ_FLAG_HIDDEN);
+    *dst = arc;
+  };
+  buildArc(&g_arcAppr);
+  buildArc(&g_arcDeny);
+
+  // "press to Approve/Deny" — appears only when the commitment crosses
+  // the arm threshold so the rotate-then-press gesture is discoverable.
+  // Centred so it lands inside the round Dial bezel even though the
+  // on-screen buttons below it may be partly cropped.
+  g_lblPress = lv_label_create(g_overlay);
+  lv_obj_set_style_text_font(g_lblPress, &lv_font_montserrat_24, 0);
+  lv_obj_align(g_lblPress, LV_ALIGN_CENTER, 0, 30);
+  lv_obj_add_flag(g_lblPress, LV_OBJ_FLAG_HIDDEN);
 
   lv_obj_t* warn = lv_label_create(g_overlay);
   lv_label_set_text(warn, "!  Approval needed");
@@ -603,6 +729,12 @@ void mount(lv_obj_t* root) {
 void show() {
   if (!g_overlay) return;
   refresh();
+  // Fresh commitment on every show — a stale value from the previous
+  // prompt must not auto-arm the new one.
+  g_commitment   = 0;
+  g_lastInputMs  = lv_tick_get();
+  g_lastDecayMs  = g_lastInputMs;
+  updateArcs();
   lv_obj_clear_flag(g_overlay, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(g_overlay);
   // Force a synchronous repaint — same LVGL 9 partial-render edge case the

@@ -38,11 +38,20 @@ void serviceIdleDimming();
 // target board. On CoreS3 SE the bezel touch strip exposes A/B/C: A hold
 // = deny / C tap = approve on the approval modal (mirrors the on-screen
 // left-deny / right-approve layout), B = toggle focus on Glance. On the
-// M5Stack Dial there's only one front-face button — the encoder push —
-// which surfaces as BtnA, so it does both modal actions (tap = approve,
-// hold = deny). The side button still acts as BtnB and toggles focus.
-// Call from the main loop after M5.update().
+// M5Stack Dial there's no bezel and no third button; the encoder push
+// (M5.BtnA) commits the rotation-armed decision (see serviceEncoder),
+// and a press while un-armed is a no-op — touch on the on-screen
+// buttons remains the no-rotation fallback. Call from the main loop
+// after M5.update().
 void serviceButtons();
+
+// Dial-only: forward encoder ticks accumulated since the last main-loop
+// iteration to the approval view, and apply the slow decay-to-zero so
+// stale commitment from a missed prompt doesn't auto-arm a later one.
+// No-op when no prompt is up. Call once per loop on boards with a rotary
+// encoder; main.cpp guards the call with #ifdef PAGER_BOARD_DIAL since
+// CoreS3 SE has no encoder to read.
+void serviceEncoder(int32_t encoderDelta);
 
 // Surface the pairing passkey full-screen. Auto-hides after the user has had
 // time to enter it on the host (handled inside the passkey view).

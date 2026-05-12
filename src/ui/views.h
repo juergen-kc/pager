@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 // All four mode views in one translation unit. Each view has a mount()
 // that builds widgets into the supplied parent, and a refresh() that
 // pulls current SessionState / settings into those widgets. Views never
@@ -67,6 +69,20 @@ namespace approval {
   // callback as the touch path, so the prompt-id snapshot logic still applies.
   void approve();
   void deny();
+
+  // Dial-specific: rotate-then-press commitment model. Encoder ticks accrue
+  // a signed commitment value (CW positive → approve bias, CCW negative →
+  // deny bias). Two arc widgets around the perimeter visualise the build-up;
+  // they brighten when |commitment| crosses the arm threshold. commitIfArmed()
+  // is called from the BtnA-press path and fires the corresponding decision
+  // only when armed, returning true if it did. tickCommitment() applies a
+  // gentle decay-to-zero after a period of no input so accidental nudges
+  // don't accumulate over a long-lived prompt. On the CoreS3 SE these are
+  // never called (no encoder), but the widgets are mounted unconditionally
+  // — they stay invisible at commitment 0, so the cost is two LVGL objects.
+  void onEncoderDelta(int32_t ticks);
+  bool commitIfArmed();
+  void tickCommitment();
 
   // Decision callback receives "once" or "deny" plus the prompt id.
   using DecideCb = void (*)(const char* decision, const char* id);

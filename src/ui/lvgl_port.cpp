@@ -11,13 +11,13 @@ namespace pager::ui::lvgl_port {
 
 namespace {
 
-constexpr int kHRes = 320;
-constexpr int kVRes = 240;
-
-// 40-row partial buffers. RGB565 → 320 * 40 * 2 = 25 600 bytes each.
-// Two of them lets LVGL render one while DMA pushes the other.
-constexpr int kBufRows = 40;
-constexpr size_t kBufPx = kHRes * kBufRows;
+// Max panel width we support — sized for the CoreS3 SE landscape (320).
+// The Dial (240×240) just uses fewer columns; the unused tail is wasted
+// RAM but keeps the buffer allocation static. Two 40-row partial buffers:
+// RGB565 → 320 * 40 * 2 = 25 600 bytes each, render-while-DMA-pushes.
+constexpr int kMaxHRes  = 320;
+constexpr int kBufRows  = 40;
+constexpr size_t kBufPx = kMaxHRes * kBufRows;
 
 uint16_t g_buf1[kBufPx];
 uint16_t g_buf2[kBufPx];
@@ -71,7 +71,13 @@ void begin() {
   // disconnected-banner staleness check (it reads as "very stale forever").
   lv_tick_set_cb([]() -> uint32_t { return millis(); });
 
-  g_disp = lv_display_create(kHRes, kVRes);
+  // Read panel dimensions from M5GFX after rotation — CoreS3 SE reports
+  // 320×240, Dial 240×240. Telling LVGL the right size keeps widgets
+  // aligned to the actual visible area; hardcoding 320 painted off-screen
+  // on the 240-wide Dial panel.
+  const int32_t hres = M5.Display.width();
+  const int32_t vres = M5.Display.height();
+  g_disp = lv_display_create(hres, vres);
   lv_display_set_flush_cb(g_disp, flushCb);
   lv_display_set_buffers(
       g_disp, g_buf1, g_buf2,

@@ -17,6 +17,9 @@
 #include "proto/protocol.h"
 #include "state/session.h"
 #include "system/clock.h"
+#ifdef PAGER_BOARD_DIAL
+#include "system/dial_encoder.h"
+#endif
 #include "ui/lvgl_port.h"
 #include "ui/router.h"
 
@@ -167,6 +170,13 @@ void setup() {
 
   g_inboundQ = xQueueCreate(INBOUND_QUEUE_DEPTH, sizeof(std::string*));
 
+#ifdef PAGER_BOARD_DIAL
+  // Rotary encoder on GPIO 41/40. Attached after M5.begin() so the
+  // GPIO subsystem is up; the ISR is IRAM-resident and runs without
+  // blocking the BLE/UI tasks.
+  pager::dial_encoder::begin();
+#endif
+
   g_deviceName = buildDeviceName();
   Serial.printf("[ble] advertising as %s\n", g_deviceName.c_str());
 
@@ -184,6 +194,9 @@ void loop() {
   drainPairingComplete();
   drainInbound();
 
+#ifdef PAGER_BOARD_DIAL
+  pager::ui::router::serviceEncoder(pager::dial_encoder::readDelta());
+#endif
   pager::ui::router::serviceButtons();
   pager::ui::router::serviceIdleDimming();
   pager::ui::router::tickPasskey();

@@ -8,17 +8,18 @@ functional per `PAGER_SPEC.md` §9.
 
 - Experimental M5Stack Dial build target — `[env:dial]` in
   `platformio.ini` flashes a working pager onto the M5Stack Dial
-  (ESP32-S3, 8 MB flash, no PSRAM, round 240×240 LCD with rotary
-  encoder). Back half (BLE / protocol / state / LVGL) ports with zero
-  changes; the UI is the CoreS3 SE landscape layout painted onto the
-  round canvas — legible but cropped by the circular bezel.
-  `PAGER_BOARD_DIAL` switches `router.cpp` to a single-button modal
-  (encoder push tap = approve, push hold = deny) — the Dial has only
-  one front-face button. The rotary encoder itself is not yet wired;
-  rotation should eventually drive the approve/deny gesture (see
-  Polish). Upload needs `--no-stub` — the USB-CDC stub handoff is
-  even flakier than the CoreS3 SE. Proves the codebase ports; doesn't
-  pretend to be a finished Dial UI.
+  (ESP32-S3, 8 MB flash, no PSRAM, round 240×240 LCD + rotary
+  encoder). Back half (BLE / protocol / state) ports unchanged.
+  Approval modal uses a Dial-native rotate-then-press: encoder CW
+  arms approve, CCW arms deny (with a green/red perimeter arc that
+  fills with commitment and brightens past the arm threshold), then
+  a push of the encoder commits. A "press to Approve/Deny" hint
+  appears once armed. On-screen Approve/Deny buttons remain as a
+  touch fallback for no-rotation operation. Glance / Recent /
+  Settings still use the CoreS3 SE landscape layout cropped to the
+  round canvas — round-aware repositioning is the next polish item.
+  Upload needs `--no-stub` — the USB-CDC stub handoff is even
+  flakier than the CoreS3 SE.
 - Bezel-button bindings on the CoreS3 SE touch strip below the LCD —
   M5.BtnA/B/C virtualise three zones at Y≈267-279. Right = Approve /
   left hold = Deny on the approval modal (mirrors the on-screen
