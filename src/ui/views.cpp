@@ -380,6 +380,21 @@ void mount(lv_obj_t* parent) {
   lv_obj_set_size(g_list, LV_PCT(100), 210);
   lv_obj_align(g_list, LV_ALIGN_BOTTOM_MID, 0, 0);
   lv_obj_set_style_bg_color(g_list, lv_color_hex(0x101010), 0);
+
+#ifdef PAGER_BOARD_DIAL
+  // Round canvas: list rows still go edge-to-edge, but narrowing to
+  // 200px and centring leaves the left/right margins inside the
+  // inscribed circle. Title centred at top so it's not cropped.
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 4);
+  lv_obj_set_size(g_list, 200, 180);
+  lv_obj_align(g_list, LV_ALIGN_CENTER, 0, 12);
+  // Drop LVGL's default rectangular border + light background fill —
+  // both look out of place on a round panel. Keep the row backgrounds
+  // intact so individual entries still read clearly.
+  lv_obj_set_style_border_width(g_list, 0, 0);
+  lv_obj_set_style_bg_opa(g_list, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_pad_all(g_list, 0, 0);
+#endif
 }
 
 void refresh() {
@@ -391,6 +406,11 @@ void refresh() {
     lv_obj_t* hint = lv_label_create(g_list);
     lv_label_set_text(hint, "No turns yet.");
     lv_obj_set_style_text_color(hint, lv_color_hex(0x606060), 0);
+    // Detach from the list's flex layout so the empty-state message
+    // sits centred rather than left-pinned (visible on the Dial once
+    // the list's outline is gone).
+    lv_obj_add_flag(hint, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_center(hint);
     return;
   }
 
@@ -441,7 +461,13 @@ void mount(lv_obj_t* parent) {
   lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(g_root, 12, 0);
   lv_obj_set_flex_flow(g_root, LV_FLEX_FLOW_COLUMN);
+#ifdef PAGER_BOARD_DIAL
+  // Round canvas: centre items horizontally so each row lands inside
+  // the inscribed circle.
+  lv_obj_set_flex_align(g_root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+#else
   lv_obj_set_flex_align(g_root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+#endif
 
   lv_obj_t* title = lv_label_create(g_root);
   lv_label_set_text(title, "Settings");
@@ -457,13 +483,26 @@ void mount(lv_obj_t* parent) {
   // Chime row.
   lv_obj_t* row = lv_obj_create(g_root);
   lv_obj_remove_style_all(row);
+#ifdef PAGER_BOARD_DIAL
+  // 180px-wide row stays inside the inscribed circle and keeps the
+  // SPACE_BETWEEN label-vs-switch gap looking intentional rather than
+  // throwing them onto two screens-worth of space.
+  lv_obj_set_size(row, 180, 36);
+#else
   lv_obj_set_size(row, LV_PCT(100), 36);
+#endif
   lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_top(row, 8, 0);
 
   lv_obj_t* chimeLbl = lv_label_create(row);
+#ifdef PAGER_BOARD_DIAL
+  // "Chime on approval" overflows a 180px row once the switch eats
+  // ~48px on the right; "Chime" reads fine alongside the switch.
+  lv_label_set_text(chimeLbl, "Chime");
+#else
   lv_label_set_text(chimeLbl, "Chime on approval");
+#endif
   lv_obj_set_style_text_color(chimeLbl, lv_color_white(), 0);
 
   g_swChime = lv_switch_create(row);
@@ -473,8 +512,17 @@ void mount(lv_obj_t* parent) {
   lv_obj_t* btn = lv_btn_create(g_root);
   lv_obj_set_style_pad_top(btn, 8, 0);
   lv_obj_set_style_bg_color(btn, lv_color_hex(0x401010), 0);
+#ifdef PAGER_BOARD_DIAL
+  // Compact rounded button inside the inscribed circle; the parens
+  // get dropped from the label to fit ~170px of usable width.
+  lv_obj_set_size(btn, 170, 34);
+#endif
   lv_obj_t* btnLbl = lv_label_create(btn);
+#ifdef PAGER_BOARD_DIAL
+  lv_label_set_text(btnLbl, "Forget bonds");
+#else
   lv_label_set_text(btnLbl, "Forget bonds (reboots)");
+#endif
   lv_obj_center(btnLbl);
   lv_obj_add_event_cb(btn, forgetClickedCb, LV_EVENT_CLICKED, nullptr);
 

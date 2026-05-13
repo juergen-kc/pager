@@ -42,6 +42,15 @@ functional per `PAGER_SPEC.md` §9.
 
 ## Polish
 
+- **Randomize BLE identity on Forget bonds.** macOS keeps its own BLE
+  pairing cache keyed on our fixed BT MAC, so after device-side
+  `Forget bonds` the host re-uses the old link keys and skips the
+  passkey display — leaving the device in a "pairing? not pairing?"
+  limbo until the user also forgets the device under System Settings
+  → Bluetooth. NimBLE supports random addresses; rotating ours each
+  time `clearIdentity()` fires would make the next advertisement look
+  like a fresh peripheral to the host and force a clean re-pair every
+  time, removing the macOS-side step entirely.
 - **Font sizes for the small panel.** Body text at `lv_font_montserrat_14`
   is legible but tight on a 2" 320×240 IPS at typical desk distance.
   Enable `LV_FONT_MONTSERRAT_16` (or 18) in `include/lv_conf.h` and
