@@ -688,42 +688,92 @@ void mount(lv_obj_t* root) {
   // on-screen buttons below it may be partly cropped.
   g_lblPress = lv_label_create(g_overlay);
   lv_obj_set_style_text_font(g_lblPress, &lv_font_montserrat_24, 0);
-  lv_obj_align(g_lblPress, LV_ALIGN_CENTER, 0, 30);
+  // y=12 sits just above the bottom touch buttons on the Dial (their
+  // top edge is around y=160 from screen top; the hint baseline lands
+  // near y=145). On the CoreS3 SE the hint is never shown — nothing
+  // feeds the encoder — so position doesn't matter there.
+  lv_obj_align(g_lblPress, LV_ALIGN_CENTER, 0, 12);
   lv_obj_add_flag(g_lblPress, LV_OBJ_FLAG_HIDDEN);
+
+  // ── Layout differs per board ──────────────────────────────────────
+  // CoreS3 SE has a 320×240 landscape canvas: header top-left, prompt
+  // text left-aligned below it, big touch buttons in the bottom
+  // corners. The Dial has a round 240×240 canvas: content stays
+  // inside the inscribed circle, so everything is centred and the
+  // buttons shrink to fit two-wide inside the bottom of the circle
+  // (~200px available width at y≈180 from top).
 
   lv_obj_t* warn = lv_label_create(g_overlay);
   lv_label_set_text(warn, "!  Approval needed");
   lv_obj_set_style_text_color(warn, kAccent, 0);
+#ifdef PAGER_BOARD_DIAL
+  lv_obj_set_style_text_font(warn, &lv_font_montserrat_14, 0);
+  lv_obj_align(warn, LV_ALIGN_TOP_MID, 0, 14);
+#else
   lv_obj_set_style_text_font(warn, &lv_font_montserrat_24, 0);
   lv_obj_align(warn, LV_ALIGN_TOP_LEFT, 0, 0);
+#endif
 
   g_lblTool = lv_label_create(g_overlay);
   lv_obj_set_style_text_color(g_lblTool, lv_color_white(), 0);
+#ifdef PAGER_BOARD_DIAL
+  lv_obj_set_style_text_align(g_lblTool, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(g_lblTool, LV_ALIGN_TOP_MID, 0, 38);
+#else
   lv_obj_align(g_lblTool, LV_ALIGN_TOP_LEFT, 0, 44);
+#endif
 
   g_lblHint = lv_label_create(g_overlay);
-  lv_obj_set_width(g_lblHint, LV_PCT(100));
   lv_label_set_long_mode(g_lblHint, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_color(g_lblHint, lv_color_hex(0xE0E0E0), 0);
+#ifdef PAGER_BOARD_DIAL
+  // 180px wide keeps wrapped text inside the inscribed circle's chord
+  // at typical hint-row heights (~y=70 from top).
+  lv_obj_set_width(g_lblHint, 180);
+  lv_obj_set_style_text_align(g_lblHint, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(g_lblHint, LV_ALIGN_TOP_MID, 0, 62);
+#else
+  lv_obj_set_width(g_lblHint, LV_PCT(100));
   lv_obj_align(g_lblHint, LV_ALIGN_TOP_LEFT, 0, 70);
+#endif
 
   g_btnDeny = lv_btn_create(g_overlay);
-  lv_obj_set_size(g_btnDeny, 130, 50);
-  lv_obj_align(g_btnDeny, LV_ALIGN_BOTTOM_LEFT, 0, 0);
   lv_obj_set_style_bg_color(g_btnDeny, lv_color_hex(0x402020), 0);
   lv_obj_t* dlbl = lv_label_create(g_btnDeny);
+#ifdef PAGER_BOARD_DIAL
+  // 92px button gets cramped at "Hold to Deny" (≈84px text). The Dial's
+  // primary deny path is the encoder anyway — touch is a fallback — so
+  // a shorter label is fine, the long-press behaviour is unchanged.
+  lv_label_set_text(dlbl, "Deny");
+#else
   lv_label_set_text(dlbl, "Hold to Deny");
+#endif
   lv_obj_center(dlbl);
   lv_obj_add_event_cb(g_btnDeny, denyCb, LV_EVENT_LONG_PRESSED, nullptr);
+#ifdef PAGER_BOARD_DIAL
+  lv_obj_set_size(g_btnDeny, 92, 36);
+  // Negative x offsets the deny button to the left of centre; y=-44
+  // from BOTTOM_MID puts its baseline at y≈190 from top, where the
+  // inscribed circle still gives ~200px of horizontal room.
+  lv_obj_align(g_btnDeny, LV_ALIGN_BOTTOM_MID, -50, -44);
+#else
+  lv_obj_set_size(g_btnDeny, 130, 50);
+  lv_obj_align(g_btnDeny, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+#endif
 
   g_btnAppr = lv_btn_create(g_overlay);
-  lv_obj_set_size(g_btnAppr, 130, 50);
-  lv_obj_align(g_btnAppr, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
   lv_obj_set_style_bg_color(g_btnAppr, lv_color_hex(0x205020), 0);
   lv_obj_t* albl = lv_label_create(g_btnAppr);
   lv_label_set_text(albl, "Approve");
   lv_obj_center(albl);
   lv_obj_add_event_cb(g_btnAppr, approveCb, LV_EVENT_CLICKED, nullptr);
+#ifdef PAGER_BOARD_DIAL
+  lv_obj_set_size(g_btnAppr, 92, 36);
+  lv_obj_align(g_btnAppr, LV_ALIGN_BOTTOM_MID, 50, -44);
+#else
+  lv_obj_set_size(g_btnAppr, 130, 50);
+  lv_obj_align(g_btnAppr, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
+#endif
 }
 
 void show() {
