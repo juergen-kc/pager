@@ -56,9 +56,16 @@ void touchReadCb(lv_indev_t* /*indev*/, lv_indev_data_t* data) {
 } // namespace
 
 void begin() {
-  // M5.begin() in main has already initialised display + touch. Configure
-  // landscape, then bring LVGL up against the active panel.
+  // M5.begin() in main has already initialised display + touch. Pick the
+  // rotation that matches the board: CoreS3 SE is a portrait panel we
+  // drive landscape (rotation 1 = 90° CW from native), Dial is a round
+  // 240×240 panel that's natively oriented USB-C-up so rotation 0 keeps
+  // our TOP/BOTTOM alignment matching the user's perspective.
+#ifdef PAGER_BOARD_DIAL
+  M5.Display.setRotation(0);
+#else
   M5.Display.setRotation(1);
+#endif
   M5.Display.fillScreen(0);
   M5.Display.setBrightness(192);
 

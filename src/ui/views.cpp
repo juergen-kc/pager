@@ -95,8 +95,12 @@ void mount(lv_obj_t* parent) {
   lv_obj_set_style_pad_all(g_root, 12, 0);
   lv_obj_set_style_bg_color(g_root, lv_color_black(), 0);
   lv_obj_set_style_bg_opa(g_root, LV_OPA_COVER, 0);
+#ifndef PAGER_BOARD_DIAL
+  // Landscape: flex column drives layout. Dial uses explicit alignment
+  // below (see the PAGER_BOARD_DIAL block at the end of mount()).
   lv_obj_set_flex_flow(g_root, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(g_root, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+#endif
 
   g_lblStatus = lv_label_create(g_root);
   lv_obj_set_style_text_color(g_lblStatus, lv_color_hex(0x808080), 0);
@@ -179,6 +183,48 @@ void mount(lv_obj_t* parent) {
   // because remove_style_all() above stripped the default flag set.
   lv_obj_add_flag(g_root, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(g_root, onLongPress, LV_EVENT_LONG_PRESSED, nullptr);
+
+#ifdef PAGER_BOARD_DIAL
+  // Round 240×240 doesn't fit the landscape flex column. Drop the
+  // widgets that don't earn their row at this size (date, sparkline,
+  // token bar, second transcript entry) and reposition the rest
+  // single-column, centred, inside the inscribed circle. refresh()
+  // still writes into the hidden widgets — cheaper than gating every
+  // text update on a board flag.
+  lv_obj_add_flag(g_lblDate,   LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(g_spark,     LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(g_tokenBar,  LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(g_lblEntry2, LV_OBJ_FLAG_HIDDEN);
+
+  auto place = [](lv_obj_t* o, lv_align_t a, int x, int y) {
+    lv_obj_add_flag(o, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_style_pad_top(o, 0, 0);   // reset flex-era spacing
+    lv_obj_align(o, a, x, y);
+  };
+  place(g_lblClock,    LV_ALIGN_TOP_MID,     0,   6);
+  place(g_lblStatus,   LV_ALIGN_TOP_MID,     0,  32);
+  place(g_lblMsg,      LV_ALIGN_TOP_MID,     0,  60);
+  place(g_lblCounters, LV_ALIGN_TOP_MID,     0,  92);
+  place(g_lblTokens,   LV_ALIGN_TOP_MID,     0, 118);
+  place(g_lblEntry1,   LV_ALIGN_TOP_MID,     0, 148);
+  place(g_lblFooter,   LV_ALIGN_BOTTOM_MID,  0, -16);
+
+  // Counter font: 24 was a chunky anchor on the 320×240 landscape;
+  // shrink to match the rest of the column at 14.
+  lv_obj_set_style_text_font(g_lblCounters, &lv_font_montserrat_14, 0);
+
+  // 200px chord keeps wrapped or truncated labels inside the inscribed
+  // circle at typical row heights.
+  lv_obj_set_width(g_lblMsg,    200);
+  lv_obj_set_width(g_lblEntry1, 200);
+
+  lv_obj_set_style_text_align(g_lblStatus,   LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_align(g_lblMsg,      LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_align(g_lblCounters, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_align(g_lblTokens,   LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_align(g_lblEntry1,   LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_align(g_lblFooter,   LV_TEXT_ALIGN_CENTER, 0);
+#endif
 }
 
 void refresh() {
