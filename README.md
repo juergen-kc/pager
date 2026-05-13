@@ -48,6 +48,26 @@ MIT) targets the regular CoreS3 with a pet character pack instead — this
 is a fresh, independent implementation with a pager-style UI. No code is
 shared; only the documented wire protocol.
 
+### Experimental: M5Stack Dial
+
+The same codebase also builds for the [M5Stack Dial](https://shop.m5stack.com/products/m5stack-dial-esp32-s3-smart-rotary-knob-w-1-28-round-touch-screen) — ESP32-S3, 1.28″ round
+240×240 touch panel with a rotary encoder. Flash with
+`pio run -e dial -t upload` instead of the default env.
+
+The encoder is the headline difference: approvals use **rotate-then-press**.
+Rotate clockwise to arm Approve, counter-clockwise to arm Deny, watch the
+coloured arc fill around the perimeter, then push the encoder to commit. A
+"press to Approve/Deny" hint appears once the arc crosses the arm threshold.
+Touch fallback is still wired — the on-screen Approve / Deny buttons respond
+to taps and long-press — so no-rotation operation works too.
+
+Glance / Recent / Settings are repositioned for the round canvas; the
+sparkline, date, token bar, and second transcript entry are dropped to
+fit. Upload requires `--no-stub` (configured in `platformio.ini`) because
+the Dial's USB-CDC stub handoff is even flakier than the CoreS3 SE's — flash
+runs ~2 min via the ROM bootloader but is reliable. See `BACKLOG.md` for
+what's still rough.
+
 ## Build & flash
 
 1. Install [PlatformIO Core](https://docs.platformio.org/en/latest/core/installation/)
@@ -99,6 +119,7 @@ pager/
 │   ├── proto/protocol.*  Hardware Buddy JSON parse/build/dispatch
 │   ├── state/session.*   in-memory snapshot model + PSRAM ring buffer
 │   ├── system/clock.*    RTC + epoch/TZ formatting helpers
+│   ├── system/dial_encoder.*  Dial rotary encoder (IRAM ISR, GPIO 41/40)
 │   └── ui/               LVGL port, router, view widgets
 ├── scripts/              diagnostic helpers + LVGL-xtensa pre-build patch
 ├── PAGER_SPEC.md         v1 specification (read this before redesigning)
